@@ -1,0 +1,38 @@
+FROM ubuntu:18.04
+
+RUN apt-get update && apt-get -y upgrade
+RUN apt-get install gosu
+
+RUN apt-get install -y csh subversion autoconf \
+    gfortran libgfortran3 g++ gv emacs \
+    gdal-bin libgdal-dev libgdal20 \
+    libtiff5-dev libhdf5-dev liblapack-dev libnetcdf15 \
+    libfftw3-3 libfftw3-dev libfftw3-single3 \
+    gnuplot-data gimp \
+    libgmt-dev gmt gmt-dcw gmt-gshhg gmt \
+    libblas-dev libblas3 liblapack-dev liblapack3 \
+
+
+COPY Anaconda3-2020.02-Linux-x86_64.sh /tmp/
+RUN bash /tmp/Anaconda3-2020.02-Linux-x86_64.sh -b
+ENV PATH $PATH:/root/anaconda3/bin
+
+WORKDIR /tmp/
+
+COPY geospatial_data_processor .
+COPY image_processor .
+COPY analyzer .
+COPY satellite_remote_sensing .
+COPY tests .
+COPY requirements.txt .
+COPY setup.py .
+COPY notebook .
+COPY MANIFEST.in .
+
+RUN conda install -c conda-forge --file requirements.txt
+
+RUN chmod 777 /root
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
