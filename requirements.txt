@@ -1,11 +1,8 @@
-jupyter
 matplotlib
 notebook
 numpy
 pandas
 seaborn
-numpy
-pandas
 geopandas
 matplotlib
 scikit-learn
@@ -13,3 +10,5 @@ opencv2
 scipy
 gdal
 xarray
+cython
+hydra-core

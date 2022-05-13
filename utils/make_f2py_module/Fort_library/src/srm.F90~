@@ -1,0 +1,154 @@
+  subroutine statistical_region_merging(data_i,data_o,band,jsize,isize)
+  use OBJECT_MODULE        
+  implicit none
+  integer(4), allocatable :: pairs1(:),pairs2(:)
+  integer(4),parameter :: band_num=3
+  REAL(4):: diff(band_num)
+  REAL(4), ALLOCATABLE:: segment(:,:,:)
+  INTEGER(4),ALLOCATABLE::edge(:,:,:),data(:,:,:)
+  INTEGER(4),INTENT(IN) :: isize,jsize,band
+  REAL(4),INTENT(IN) :: data_i(band,jsize,isize)  
+  INTEGER(4),INTENT(OUT) :: data_o(jsize,isize)  
+  integer(4) :: i,j,k,kk,i1,j1,i2,j2,i3,j3
+  integer(4) :: irec,ii,jj,ui
+  real(4) :: mask,logdelta
+  real(4) :: smallregion,red,green,blue,size
+  real(4), allocatable::diffmax(:)
+  integer(4) :: pmax_uf
+  integer(4) :: ipos_8c(4),jpos_8c(4)
+  integer(4) :: ipos_4c(2),jpos_4c(2)
+  
+  !  real(4),ALLOCATABLE :: test(:,:,:)
+  
+  REAL(4) :: q  
+  REAL(4),PARAMETER ::thres_size_min=60   ! 36    !-----i.e. 18m x 18m, 12m x 27m
+  REAL(4),PARAMETER ::thres_size_max=25000            !---- i.e. 1000m x 250m 
+  REAL(4),PARAMETER ::thres_ls1= 1.5
+  REAL(4),PARAMETER ::thres_ls2= 0.8
+  REAL(4),PARAMETER ::thres_red= 100.
+  REAL(4),PARAMETER ::thres_asp = 0.8
+  REAL(4),PARAMETER ::thres_comp = 0.30 !0.35
+  INTEGER(4) :: irec1,irec2
+  INTEGER(4) :: dummy1(100000),dummy2(100000)
+  INTEGER(4),ALLOCATABLE :: red_object(:),green_object(:)
+  REAL(4),ALLOCATABLE :: osize(:),compactness(:),aspectratio(:),symmetry(:),concomplex(:)
+  REAL(4) :: imin(13),imax(13),jmin(13),jmax(13)
+  REAL(4) :: xmin(13),xmax(13),ymin(13),ymax(13),amin,asp
+  REAL(4) :: cos_as(13),sin_as(13),rot_x,rot_y,pi,dora
+  INTEGER(4),PARAMETER::null=0
+
+   
+SUBROUTINE 
+
+   mask=999
+  !-------------initialization of uf----------------------------     
+   call init_unionfind(isize,jsize,data(:,:,:),band_num,mask,smax_uf)     
+  !------------connected system-------------------------------
+  ipos_8c=(/-1,0,1,1/)
+  jpos_8c=(/1,1,1,0/)
+  ipos_4c=(/1,0/)
+  jpos_4c=(/0,1/)
+  allocate(pairs1(smax_uf*4),pairs2(smax_uf*4))
+  pairs1(:)=-999;pairs2(:)=-999
+  irec=0
+  do j=1,jsize
+     do i=1,isize
+!--------------------8-connected system-------------------------
+        if(ptrt(i,j).eq.0) cycle
+        do kk=1,4
+          if((i+ipos_8c(kk).le.0).or.(i+ipos_8c(kk).gt.isize)) cycle
+          if((j+jpos_8c(kk).le.0).or.(j+jpos_8c(kk).gt.jsize)) cycle           
+           if(ptrt(i+ipos_8c(kk),j+jpos_8c(kk)).ne.0) then
+           irec=1+irec
+           pairs1(irec)=ptrt(i,j)
+           pairs2(irec)=ptrt(i+ipos_8c(kk),j+jpos_8c(kk))
+        endif
+     enddo
+
+     enddo
+  enddo
+!-------------------------------------------------------------------  
+  pmax_uf=irec
+  logdelta = 2.0 * log(6.0 * smax_uf)
+!-------------heap sort by gradients between pixel values-------
+  allocate(diffmax(1:pmax_uf))
+  do i=1,pmax_uf
+    do k=1,3
+     diff(k)=abs(get_property_uf(pairs1(i),k)-get_property_uf(pairs2(i),k))
+  enddo
+!  diff(1)=diff(1)/diff(3)
+!  diff(2)=diff(2)/diff(3)
+    diffmax(i)=maxval(diff(1:2))
+     enddo
+     call heapsort(pmax_uf,diffmax,pairs1,pairs2)
+!---------------region merging and edge detection---------------------
+     irec=0
+     edge(:,:,:)=0
+     do i=1,pmax_uf
+         i2=get_ipos_uf(pairs1(i))
+         j2=get_jpos_uf(pairs1(i))
+         i3=get_ipos_uf(pairs2(i))
+         j3=get_jpos_uf(pairs2(i))        
+         !     print *,pairs1(i),pairs2(i)
+!         print *,predicate(pairs1(i),pairs2(i)),i
+      if(predicate(pairs1(i),pairs2(i))) then
+         call union_uf(pairs1(i),pairs2(i),ui)
+         edge(i2,j2,1)=0
+         edge(i2,j2,2)=0
+      else
+         if(edge(i3,j3,1).eq.0) then
+            edge(i2,j2,1)=i3
+            edge(i2,j2,2)=j3
+         endif
+      endif
+   enddo
+   segment(:,:,:)=0.
+  do j=1,jsize
+     do i=1,isize
+        ii=find_uf(ptrt(i,j))
+        do k=1,3
+           segment(i,j,k)=get_property_uf(ii,k)
+        enddo
+  enddo
+  enddo
+
+  DEALLOCATE(diffmax,pairs1,pairs2)
+
+
+  
+end subroutine STATISTICAL_REGION_MERGING
+
+
+LOGICAL FUNCTION predicate(tmp1,tmp2)
+  use OBJECT_MODULE
+  implicit none
+  INTEGER(4),INTENT(IN)::tmp1,tmp2
+  INTEGER(4)::r1,r2
+  REAL(4),PARAMETER :: g =256.0
+  REAL(4) :: b
+  REAL(4) :: r1_sz,r2_sz,logr1,logr2
+  REAL(4) :: diff(3)
+  !    print *,pmax_uf
+
+  r1=find_uf(tmp1)
+  r2=find_uf(tmp2)
+
+    do j =1,3
+       diff(j)=(get_property_uf(r1,j)-get_property_uf(r2,j))**2
+    enddo
+    r1_sz=real(get_size_uf(r1))
+    r2_sz=real(get_size_uf(r2))
+    logr1=min(g,r1_sz)*log(1.0+r1_sz)
+    logr2=min(g,r2_sz)*log(1.0+r2_sz)
+    b=g**2./(2.*q*r1_sz)*(logr1+logdelta)
+    b=b+g**2./(2.*q*r2_sz)*(logr2+logdelta)
+!    if((diff(1).le.b).and.(diff(2).le.b).and.(diff(3).le.b)) then
+    if((diff(1).le.b).and.(diff(2).le.b)) then    
+       predicate=.true.
+       return
+    else
+       predicate=.false.
+    endif
+  END FUNCTION predicate
+
+END MODULE Segmentation

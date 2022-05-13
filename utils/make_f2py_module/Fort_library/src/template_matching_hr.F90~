@@ -1,0 +1,272 @@
+MODULE timeseries_analysis
+  USE Basic_processing
+  IMPLICIT NONE
+  INTEGER, PARAMETER :: MAX_IO = 64
+
+CONTAINS
+
+  SUBROUTINE incbeta_openland_etection(data_i,data_o,band,jsize,isize)
+  IMPLICIT NONE
+  INTEGER :: i,j,k,l,ii,jj,kk,i2,j2,k2,i3,j3,k3      
+  INTEGER(4),INTENT(IN) :: isize,jsize,band
+  REAL(4), INTENT(OUT)  :: data_o(5,jsize,isize)
+  INTEGER(1), INTENT(IN) :: data_i(band,jsize,isize)
+  INTEGER :: num
+  INTEGER :: threshold
+  INTEGER :: sum
+  REAL(8) :: prob1,prob2,prob_t
+  REAL(8) :: prob_a1,prob_a2
+  REAL(8),parameter :: p1=0.7
+  REAL(8),parameter :: p2=0.3
+  REAL(8) :: p3
+  REAL(8) :: q1,q2,param_a,param_b
+  INTEGER :: m,n
+  REAL(8) :: x1,x2,x3
+  REAL(8) :: max_prob
+  INTEGER :: argmax_threshold
+  REAL(8) :: gamma_d,hygeo
+
+
+
+  do i = 1, isize
+     do j = 1, jsize
+
+        inum=0
+        do k =1, band
+           inum = 1 + inum
+           if((data_i(k,j,i).eq.1).or.(data_i(k,j,i).eq.0)) then
+              ts(inum) = data_i(k,j,i)
+              ts_index(inum) = k
+           endif
+        enddo
+        
+        if(inum.le.1) cycle
+
+        do t = 1, inum-1
+
+           do k =1, t
+              if(data(t).eq.1) sum=sum+1
+           enddo
+
+           call incbeta(
+
+           do k =t+1,inum
+              if(data(t).eq.0) sum=sum+1
+           enddo
+
+           call incbeta(
+
+
+           
+           prob_t = prob1 * prob2
+           
+           if(prob_t.ge.max_prob_t) then
+              argmax_threshold=t
+              max_prob_t = prob_t
+              max_prob1 = prob1
+              max_prob2 = prob2
+           endif
+
+        enddo
+        
+           
+        
+  num=100
+  sum=25
+  q1=1.0
+  q2=0.5
+  param_a=1
+  param_b=1
+  m=int(sum+param_a-1)
+  n=int(num-sum+param_b-1)
+
+  print *,m,n
+  
+  do j =1,9
+     q2=0.1*real(j)
+     prob1=0
+  
+  x1 = hygeo(dble(1.),dble(m+n),dble(m+1),q2)
+  x2 = (q2**m)*((1-q2)**n)/m
+  prob1=x1*x2
+  x3=gamma_d(m+n)/gamma_d(m)/gamma_d(n)
+  prob1=prob1*x3
+  print *,q2,prob1,x1,x2,x3
+  enddo
+!  data(1:2)=0;data(4:6)=1!;data(15)=1;data(16)=1 
+!  print *,data(:)
+
+
+
+  do j =1, n-1
+
+  threshold=j
+  !-------split data---------------
+  sum=0
+  do i =1,threshold
+     if(data(i).eq.1) sum=sum+1
+  enddo
+  call binominal_distribution(p1,threshold,sum,prob_a1,1)
+  call binominal_distribution(p2,threshold,sum,prob_a2,1)
+!  print *,p2,threshold,threshold-sum,sum
+
+  do i = 1,11
+     p3 = 0.1 * real(i - 1)
+     call binominal_distribution(p3,threshold,sum,prob_a1,1)
+     print *,p3,prob_a1
+  enddo
+  
+!  prob1=log(prob_a1)-log(prob_a1+prob_a2)
+  prob1=prob_a1/(prob_a1+prob_a2)
+!  print *, threshold,prob_a1,prob_a2,prob1,sum
+!  print *,sum
+!  print *, "second time series"
+  sum=0
+  do i =threshold+1,n
+     if(data(i).eq.1) sum=sum+1
+  enddo
+  !  print *,sum
+!  print *,i
+
+     
+  call binominal_distribution(p2,n-threshold,sum,prob_a2,1)
+  call binominal_distribution(p1,n-threshold,sum,prob_a1,1)
+!  print *,prob2
+
+  prob2=prob_a2/(prob_a1+prob_a2)
+! print *, threshold,prob_a1,prob_a2,prob2,sum
+  
+  prob_t=prob1 * prob2 !(prob2+prob1-1)/prob1
+!   print *, j,prob1,prob2,prob_t
+
+  if(prob_t.ge.max_prob) then
+     argmax_threshold=threshold
+     max_prob = prob_t
+  endif
+
+  enddo
+!----------------------------------
+  print *,max_prob,argmax_threshold
+
+END SUBROUTINE incbeta_openland_etection  
+
+subroutine binominal_distribution(p,n,n_thres1,prob,mode)
+  implicit none
+  REAL(8),intent(in) :: p
+  INTEGER,intent(in) :: n
+  INTEGER :: k
+  INTEGER :: i,j
+  REAL(8) :: bin(0:n)
+  REAL(8) :: n1,n2
+  INTEGER :: nmin,nmax
+  INTEGER :: mode
+  REAL,parameter :: threshold=0.9
+  INTEGER,intent(in) :: n_thres1
+  REAL(8),INTENT(OUT) :: prob
+  
+  do k = 0,n
+     if(k.eq.0) then
+        n1=1
+        n2=1
+     else
+        n1=1
+        do j =n-k+1,n
+           n1=n1*real(j)
+        enddo
+        n2=1
+        do j =1,k
+           n2=n2*real(j)
+        enddo
+     endif
+     
+     bin(k)=n1/n2*(p**k)*(1-p)**(n-k)
+  enddo
+
+  if(mode.eq.1) then
+     nmin = 0
+     nmax = n_thres1
+  else
+     nmin = n_thres1
+     nmax = n
+  endif
+  
+  prob=0
+  do k =nmin,nmax
+     prob=bin(k)+prob
+  enddo
+  prob=bin(n_thres1)
+endsubroutine binominal_distribution
+
+REAL(8) FUNCTION gamma_d(a)
+  implicit none
+  INTEGER,intent(in) :: a
+  INTEGER :: k
+  INTEGER :: i,j
+  gamma_d = 1
+  do i = 1, a-1
+     gamma_d = dble(i) * gamma_d
+  enddo
+end FUNCTION gamma_d
+
+REAL FUNCTION beta(a, b)
+  implicit none
+  INTEGER,intent(in) :: a
+  INTEGER,intent(in) :: b
+  REAL :: gamma_x,gamma_y,gamma_xy
+  INTEGER :: k
+  INTEGER :: i,j
+
+  gamma_x = 1 
+  do i = 1, a-1
+     gamma_x = real(i) * gamma_x
+  enddo
+  
+  gamma_y = 1 
+  do i = 1, b-1
+     gamma_y = real(i) * gamma_y
+  enddo
+  
+  gamma_xy = 1 
+  do i = 1, a+b-1
+     gamma_xy = real(i) * gamma_xy
+  enddo
+
+  beta=gamma_x*gamma_y/gamma_xy
+  
+end FUNCTION beta
+
+REAL(8) FUNCTION hygeo(a, b, c, x)
+  implicit none
+  REAL(8),intent(in) :: a,b,c,x
+  INTEGER :: k
+  INTEGER :: i,j
+  REAL(8) :: p1,f,p0
+  f = 0
+  p0 = 1
+  do i = 0, 1000
+     p1=(a+dble(i))*(b+dble(i))/(c+dble(i))/(1+dble(i))*x*p0
+     f = f + p0
+     p0=p1
+  enddo
+  hygeo=f
+end FUNCTION hygeo
+
+ REAL(8) FUNCTION incbeta(a, b, c, x)
+  implicit none
+  REAL(8),intent(in) :: a,b,c,x
+  INTEGER :: k
+  INTEGER :: i,j
+  REAL(8) :: p1,f,p0
+  f = 1
+  p0 = 1
+  do i = 0, 100
+     p1=(a+i)*(b+i)/(c+i)/(1+i)*x*p0
+     f = f + p1
+     p0=p1
+  enddo
+  incbeta=f 
+end FUNCTION incbeta
+
+
+
+END MODULE timeseries_analysis
