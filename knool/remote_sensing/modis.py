@@ -129,7 +129,7 @@ class MXD021KM():
             
         calib=self.get_calibrated_em(band_min=10,band_max=12)
         scan_zenith=self.get_sensor_zenith()
-        ist=thermal_sensor_process.calc_IST_with_split_window(calib[0,:,:],calib[1,:,:],scan_zenith,cfg2)
+        ist=thermal_sensor_process.calc_IST_by_split_window(calib[0,:,:],calib[1,:,:],scan_zenith,cfg2)
         self.output=ist
         self.output_prop=geo_info.get_property_from_raster_with_gcps(self.ds_em)
         return ist
