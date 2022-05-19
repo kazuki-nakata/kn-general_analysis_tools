@@ -121,3 +121,76 @@ def make_south_nsidc_raster_from_polygon(infile, outfile, width, length, band, f
     gdal.RasterizeLayer(ds, [1], source_layer,options=["ATTRIBUTE=id",'ALL_TOUCHED=TRUE']) #, burn_values=[1]
 #    gdal.RasterizeLayer(ds, [1], source_layer,burn_values=[1])  
     ds.FlushCache()
+
+def create_line_string(infile,latlon_list,epsg=4326):
+    line = ogr.Geometry(ogr.wkbLineString)
+    for latlon in latlon_list:
+        line.AddPoint(latlon[0], latlon[1])
+
+    ext=os.path.splitext(infile)[::-1][0]
+
+    if ext == ".shp": 
+        ftype="ESRI Shapefile"
+    elif ext == ".kml":
+        ftype="KML"
+    else:
+        print("The file type is not supported currently.")
+        return
+        
+    driver = ogr.GetDriverByName(ftype)
+    ds = driver.CreateDataSource(infile)
+    srs =  osr.SpatialReference()
+    srs.ImportFromEPSG(epsg)
+    
+    # create one layer 
+    layer = ds.CreateLayer("line", srs, ogr.wkbLineString)
+    # Add an ID field
+    idField = ogr.FieldDefn("id", ogr.OFTInteger)
+    layer.CreateField(idField)
+    # Create the feature and set values
+    featureDefn = layer.GetLayerDefn()
+    feature = ogr.Feature(featureDefn)
+    feature.SetGeometry(line)
+    feature.SetField("id", 1)
+    layer.CreateFeature(feature)
+    feature = None
+    # Save and close DataSource
+    ds = None
+
+def create_polygon(infile,latlon_list,epsg=4326):
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    for latlon in latlon_list:
+        ring.AddPoint(latlon[0], latlon[1])
+    ring.AddPoint(latlon_list[0][0], latlon_list[0][1])
+    poly = ogr.Geometry(ogr.wkbPolygon)
+    poly.AddGeometry(ring)
+    
+    ext=os.path.splitext(infile)[::-1][0]
+
+    if ext == ".shp": 
+        ftype="ESRI Shapefile"
+    elif ext == ".kml":
+        ftype="KML"
+    else:
+        print("The file type is not supported currently.")
+        return
+        
+    driver = ogr.GetDriverByName(ftype)
+    ds = driver.CreateDataSource(infile)
+    srs =  osr.SpatialReference()
+    srs.ImportFromEPSG(epsg)
+    
+    # create one layer 
+    layer = ds.CreateLayer("polygon", srs, ogr.wkbPolygon)
+    # Add an ID field
+    idField = ogr.FieldDefn("id", ogr.OFTInteger)
+    layer.CreateField(idField)
+    # Create the feature and set values
+    featureDefn = layer.GetLayerDefn()
+    feature = ogr.Feature(featureDefn)
+    feature.SetGeometry(poly)
+    feature.SetField("id", 1)
+    layer.CreateFeature(feature)
+    feature = None
+    # Save and close DataSource
+    ds = None    

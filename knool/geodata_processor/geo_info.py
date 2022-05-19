@@ -5,10 +5,7 @@ import pandas as pd
 import xarray as xr
 from math import sin, cos, sqrt, atan2, radians, atan
 
-def get_latlons_from_raster(raster,interval):
-    # create the new coordinate system
-    old_cs= osr.SpatialReference()
-    old_cs.ImportFromWkt(raster.GetProjectionRef())
+def get_wgs84_wkt():
     wgs84_wkt = """
     GEOGCS["WGS 84",
         DATUM["WGS_1984",
@@ -20,8 +17,15 @@ def get_latlons_from_raster(raster,interval):
         UNIT["degree",0.01745329251994328,
             AUTHORITY["EPSG","9122"]],
         AUTHORITY["EPSG","4326"]]"""
+    return wgs84_wkt
+
+def get_latlons_from_raster(raster,interval):
+    # create the new coordinate system
+    old_cs= osr.SpatialReference()
+    old_cs.ImportFromWkt(raster.GetProjectionRef())
+    wgs84_wkt = get_wgs84_wkt()
     new_cs = osr.SpatialReference()
-    new_cs .ImportFromWkt(wgs84_wkt)
+    new_cs.ImportFromWkt(wgs84_wkt)
 
     transform = osr.CoordinateTransformation(old_cs,new_cs) 
 
@@ -131,6 +135,122 @@ def calc_distances(lons1,lats1,lons2,lats2):
     c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
     distance = R * c
     return distance
+
+def convert_lla_to_ecef(lat0, lon0, alt, a=6378137.0, b=6356752.314245):
+    f = (a - b) / a
+    
+    lon=np.radians(lon0)
+    lat=np.radians(lat0)
+    
+    rad = np.float64(a)        # Radius of the Earth (in meters)
+
+    cosLat = np.cos(lat)
+    sinLat = np.sin(lat)
+    FF     = (1.0-f)**2
+    C      = 1/np.sqrt(cosLat**2 + FF * sinLat**2)
+    S      = C * FF
+    x = (rad * C + alt)*cosLat * np.cos(lon)
+    y = (rad * C + alt)*cosLat * np.sin(lon)
+    z = (rad * S + alt)*sinLat
+    return x, y, z
+
+
+def convert_ecef_to_lla(x, y, z, a=6378137.0, b=6356752.314245):
+    f = (a - b) / a
+
+    e_sq = f * (2 - f)                       
+    eps = e_sq / (1.0 - e_sq)
+    p = np.sqrt(x * x + y * y)
+    q = np.arctan2((z * a), (p * b))
+
+    sin_q = np.sin(q)
+    cos_q = np.cos(q)
+
+    sin_q_3 = sin_q * sin_q * sin_q
+    cos_q_3 = cos_q * cos_q * cos_q
+
+    phi = np.arctan2((z + eps * b * sin_q_3), (p - e_sq * a * cos_q_3))
+    lam = np.arctan2(y, x)
+
+    v = a / np.sqrt(1.0 - e_sq * np.sin(phi) * np.sin(phi))
+    h   = (p / np.cos(phi)) - v
+
+    lat = np.degrees(phi)
+    lon = np.degrees(lam)
+
+    return lat, lon, h
+
+def convert_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
+    px=np.radians(90)
+    py=np.radians(90-lat0)
+    pz=np.radians(lon0)
+    pz2=np.radians(90)
+    p1=np.array([x,y,z])
+    p0=np.array([x0,y0,z0])
+
+    Ry = np.array([[np.cos(py), 0, -np.sin(py)],
+                   [0, 1, 0],
+                   [np.sin(py), 0, np.cos(py)]])
+    
+    Rz = np.array([[np.cos(pz), np.sin(pz), 0],
+                   [-np.sin(pz), np.cos(pz), 0],
+                   [0, 0, 1]])
+    
+    Rz2 = np.array([[np.cos(pz2), np.sin(pz2), 0],
+                   [-np.sin(pz2), np.cos(pz2), 0],
+                   [0, 0, 1]])
+
+    R = Rz2.dot(Ry).dot(Rz)
+    x, y, z = R.dot(p1-p0)
+    return x, y, z
+
+
+def convert_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, x, y, z):
+    py=np.radians(90-lat0)
+    pz=np.radians(lon0)
+    pz2=np.radians(90)
+    p0=np.array([x0,y0,z0])
+    p2=np.array([x,y,z])
+
+    Ry = np.array([[np.cos(py), 0, -np.sin(py)],
+                   [0, 1, 0],
+                   [np.sin(py), 0, np.cos(py)]])
+    
+    Rz = np.array([[np.cos(pz), np.sin(pz), 0],
+                   [-np.sin(pz), np.cos(pz), 0],
+                   [0, 0, 1]])
+    
+    Rz2 = np.array([[np.cos(pz2), np.sin(pz2), 0],
+                   [-np.sin(pz2), np.cos(pz2), 0],
+                   [0, 0, 1]])
+    R = np.linalg.inv(Rz2.dot(Ry).dot(Rz))
+    p1 = R.dot(p2) + p0
+
+    return p1
+
+def calc_line_buffer_point(lat0,lon0,h0,lat,lon,h,distance,ori="right"):
+    R=6373000.0
+    x0, y0, z0 = convert_lla_to_ecef(lat0, lon0, h0, a=R, b=R)
+    x, y, z = convert_lla_to_ecef(lat, lon, h, a=R, b=R)    
+    p, q, r = convert_ecef_to_enu(x0, y0, z0, lat0, lon0 , h0, x, y, z)
+    
+    sign=1
+    if ori=="left" : sign=-1
+    
+    theta=distance/R
+    tan_th=np.tan(theta)
+    distance2=R*tan_th
+    coef=1/(q**2/(p**2)+1)
+    q2 = np.sqrt(distance2**2 * coef)
+    q2= sign*q2
+    p2 = -q*q2/p
+    r2 = 0
+
+    buff_ecef=convert_enu_to_ecef(x0, y0, z0, lat0, lon0 , h0, p2, q2, r2)
+    lat,lon,h=convert_ecef_to_lla(*buff_ecef, a=R, b=R)
+    
+    return lat, lon, h
+
 
 def count_shp_in_polygon(shape, polygon):
     poly = ogr.Open(polygon, 1)
