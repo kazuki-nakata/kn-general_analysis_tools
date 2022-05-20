@@ -18,16 +18,18 @@ class LANDSAT8L2A():
         for band in bands: 
             band_name=band #should change
             self.ds[band_name] = gdal.Open(band, gdal.GA_ReadOnly)
-        mask_path = glob.glob(directory + os.sep + date + "\*_pixel_qa.tif")[0]
+        mask_path = glob.glob(dirname + os.sep + basename + "\*_pixel_qa.tif")[0]
         self.ds["qa"] = gdal.Open(mask_path, gdal.GA_ReadOnly)
         
-    def landsat8_mask_function(self,mask_arr=self.ds["qa"]):
+    def landsat8_mask_function(self,mask_arr):
+        mask_arr=self.ds["qa"]
         maskfunc = np.where(
             (mask_arr != 322)
         )
         return maskfunc
 
-    def landsat8_mask_function(self,mask_arr=self.ds["qa"]):
+    def landsat8_mask_function(self,mask_arr):
+        mask_array=self.ds["qa"]
         maskfunc = np.where(
             (mask_arr == 324) |
             (mask_arr == 388) |

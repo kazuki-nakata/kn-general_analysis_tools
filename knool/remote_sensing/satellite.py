@@ -17,51 +17,74 @@ class tles_for_asat():
         for i, tle in enumerate(self.tles):
             date_list.append(tle.epoch.utc_datetime())
             num_list.append(i)
-        self.df=pd.DataFrame(num_list,columns=['num']).assign(Date=pd.to_datetime(date_list)).set_index('Date')
+        self.df0=pd.DataFrame(num_list,columns=['num']).assign(Date=pd.to_datetime(date_list)).set_index('Date')
+        self.df=self.df0
+        
+    def set_period(self,fdate,ldate):
+        ftime = dt.strptime(fdate, '%Y-%m-%d %H:%M:%S').replace(tzinfo=utc)
+        ltime = dt.strptime(ldate, '%Y-%m-%d %H:%M:%S').replace(tzinfo=utc)
+        self.df=self.df0[(self.df0.index>ftime) & (self.df0.index<ltime)]
 
+    def _get_position(self,num,date_sf):
+        geocentric=self.tles[num].at(date_sf)
+        subpoint = geocentric.subpoint()
+        lat = subpoint.latitude.degrees
+        lon = subpoint.longitude.degrees
+        ele = subpoint.elevation.m
+        return lat,lon,ele
+    
     def calc_position_at(self,date):
         #input:
         # date: datetime object -> e.g., dt(2018, 2, 1, 12, 15, 30, 2000, tzinfo=utc)
         df=self.df
         row1=df.loc[df.index==df.index.unique()[df.index.unique().get_loc(pd.to_datetime(date), method='nearest')]]
-        tle=self.tles[row1.num.values[0]]
         date1_sf=load.timescale().from_datetime(date)
-        geocentric=tle.at(date1_sf)
-        subpoint = geocentric.subpoint()
-        lat = subpoint.latitude.degrees
-        lon = subpoint.longitude.degrees
-        ele = subpoint.elevation.m
-
-        return lat, lon, ele
+        num=row1.num.values[0]
+        return self._get_position(num,date1_sf)
     
     def calc_positions_between(self,fdate,ldate,interval):
         #input:
         # ldate, fdate: text -> e.g., 2011-07-01
         # interval: int (min) -> 30 (min)
-        ds_date=pd.date_range(start=fdate, end=ldate, freq=str(interval)+"min")
+        ds_date=pd.date_range(start=fdate, end=ldate, freq=str(interval)+"min",tz=utc)
         pos_list=[]
         for date in ds_date:
-            date=date.replace(tzinfo=utc)
             lat, lon, ele = self.calc_position_at(date)
             pos_list.append([lat,lon])
         self.output=pos_list
         self.output_type="line"
         return pos_list
 
+    def calc_positions_faster_between(self,fdate,ldate,interval):
+        fdt = dt.strptime(fdate, '%Y-%m-%d %H:%M:%S')
+        ldt = dt.strptime(ldate, '%Y-%m-%d %H:%M:%S')
+        mdt=fdt+(ldt-fdt)/2
+        mdt=mdt.replace(tzinfo=utc)
+        
+        df=self.df
+        row1=df.loc[df.index==df.index.unique()[df.index.unique().get_loc(pd.to_datetime(mdt), method='nearest')]]
+        num=row1.num.values[0]
+ 
+        date_ds=pd.date_range(start=fdate, end=ldate, freq=str(interval)+"min",tz=utc)
+        date_list=date_ds.to_list()
+        date_sf=load.timescale().from_datetimes(date_list)
+        
+        lat, lon, _ =self._get_position(num,date_sf)
+        self.output=np.stack([lat,lon]).T
+        self.output_type="line"       
+
     def calc_buff_positions_between(self,fdate,ldate,interval,distance,ori="right"):
         #input:
         # ldate, fdate: text -> e.g., 2011-07-01
         # interval: int (min) -> 30 (min)
-        ds_date=pd.date_range(start=fdate, end=ldate, freq=str(interval)+"min")
+        ds_date=pd.date_range(start=fdate, end=ldate, freq=str(interval)+"min",tz=utc)
         pos_list=[]
        
         for i, date in enumerate(ds_date[:-1]):
-            date=date.replace(tzinfo=utc)
             lat, lon, ele = self.calc_position_at(date)
             
             date2=ds_date[i+1]
-            date2=date2.replace(tzinfo=utc)
-            lat2, lon2, ele2 = self.calc_position_at(date2)    
+            lat2, lon2, ele2 = self.calc_position_at(date2)
 
             lat3,lon3,ele3=geo_info.calc_line_buffer_point(lat,lon,0,lat2,lon2,0,distance,ori)
             pos_list.append([lat3,lon3])
@@ -69,7 +92,27 @@ class tles_for_asat():
         self.output_type="line"
         self.output=pos_list
         return pos_list
-    
+
+    def calc_buff_positions_faster_between(self,fdate,ldate,interval,distance,ori="right"):
+        fdt = dt.strptime(fdate, '%Y-%m-%d %H:%M:%S')
+        ldt = dt.strptime(ldate, '%Y-%m-%d %H:%M:%S')
+        mdt=fdt+(ldt-fdt)/2
+        mdt=mdt.replace(tzinfo=utc)
+        
+        df=self.df
+        row1=df.loc[df.index==df.index.unique()[df.index.unique().get_loc(pd.to_datetime(mdt), method='nearest')]]
+        num=row1.num.values[0]
+        
+        date_ds=pd.date_range(start=fdate, end=ldate, freq=str(interval)+"min",tz=utc)
+        date_list=date_ds.to_list()
+        date_sf=load.timescale().from_datetimes(date_list)
+        
+        lat, lon, _ =self._get_position(num, date_sf)
+        
+        lat2,lon2,_=geo_info.calc_line_buffer_point(lat[0:-1],lon[0:-1],0,lat[1:],lon[1:],0,distance,ori)
+        self.output=np.stack([lat2,lon2]).T
+        self.output_type="line"
+
     def calc_buff_area_between(self,fdate,ldate,interval,distance,ori="middle"):
         if ori=="middle":
             rpos_list=self.calc_buff_positions_between(fdate,ldate,interval,distance/2,ori="right")

@@ -174,7 +174,7 @@ class MXD29():
         ds_qa=self.get_subds(self.subdsID["Ice_Surface_Temperature_Pixel_QA"])
         self.output=ds_qa.ReadAsArray()
         self.output_prop=geo_info.get_property_from_raster_with_gcps(ds_qa)
-        return qa_array
+        return self.output
     
     def export_output(self, filepath, no_data=None, file_type='GTiff', dtype=gdal.GDT_Float32):
         geo_io.make_raster_with_gcps_from_array(self.output, filepath, dtype, no_data, self.output_prop, file_type)
