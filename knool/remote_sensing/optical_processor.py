@@ -1,4 +1,5 @@
-import os, time, gdal
+import os, time
+from osgeo import gdal
 import numpy as np
 
 def RGB_for_byte_stack(red_path, green_path, blue_path, prop, max, min, no_data):

@@ -1,7 +1,8 @@
 import glob
-import gdal
+from osgeo import gdal
 import numpy as np
 import os
+from ..helpers.misc import import_config
 
 class LANDSAT8L2A():
     def __init__(self,zipfile):
@@ -13,7 +14,7 @@ class LANDSAT8L2A():
         dirname = os.path.dirname(zipfile)
         self.product='L2A'
 
-        bands = glob.glob(directory + os.sep + date + "\*_band?.tif")[0]
+        bands = glob.glob(dirname + os.sep + basename + "\*_band?.tif")[0]
         for band in bands: 
             band_name=band #should change
             self.ds[band_name] = gdal.Open(band, gdal.GA_ReadOnly)

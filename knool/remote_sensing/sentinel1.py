@@ -1,5 +1,5 @@
 import os
-import gdal
+from osgeo import gdal
 import xml.etree.ElementTree as ET
 import numpy as np
 import math
