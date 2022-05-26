@@ -71,7 +71,8 @@ class tles_for_asat():
         
         lat, lon, _ =self._get_position(num,date_sf)
         self.output=np.stack([lat,lon]).T
-        self.output_type="line"       
+        self.output_type="line"
+        return self.output
 
     def calc_buff_positions_between(self,fdate,ldate,interval,distance,ori="right"):
         #input:
@@ -112,25 +113,47 @@ class tles_for_asat():
         lat2,lon2,_=geo_info.calc_line_buffer_point(lat[0:-1],lon[0:-1],0,lat[1:],lon[1:],0,distance,ori)
         self.output=np.stack([lat2,lon2]).T
         self.output_type="line"
+        return self.output
 
     def calc_buff_area_between(self,fdate,ldate,interval,distance,ori="middle"):
+
         if ori=="middle":
-            rpos_list=self.calc_buff_positions_between(fdate,ldate,interval,distance/2,ori="right")
-            lpos_list=self.calc_buff_positions_between(fdate,ldate,interval,distance/2,ori="left")
+            rpos_array=self.calc_buff_positions_faster_between(fdate,ldate,interval,distance/2,ori="right")
+            lpos_array=self.calc_buff_positions_faster_between(fdate,ldate,interval,distance/2,ori="left")
         elif ori=="right":
-            rpos_list=self.calc_buff_positions_between(fdate,ldate,interval,distance,ori="right")
-            lpos_list=self.calc_positions_between(fdate,ldate,interval)
+            rpos_array=self.calc_buff_positions_faster_between(fdate,ldate,interval,distance,ori="right")
+            lpos_array=self.calc_positions_faster_between(fdate,ldate,interval)
         elif ori=="left":
-            lpos_list=self.calc_buff_positions_between(fdate,ldate,interval,distance,ori="left")
-            rpos_list=self.calc_positions_between(fdate,ldate,interval)
+            lpos_array=self.calc_buff_positions_faster_between(fdate,ldate,interval,distance,ori="left")
+            rpos_array=self.calc_positions_faster_between(fdate,ldate,interval)
         else:
-            print("The mode is currently not supported.")
-        rpos_list.extend(lpos_list[::-1])
-        output=rpos_list
-        self.output=output
+            print("The mode is not currently supported.")
+        
+        result=np.concatenate([rpos_array,lpos_array[::-1]])
+        self.output=result
         self.output_type="polygon"
-        return output
-    
+        return self.output   
+
+    def find_scenes(self,fdate,ldate,interval,distance,ori="middle"):
+        if ori=="middle":
+            rpos_array=self.calc_buff_positions_faster_between(fdate,ldate,interval,distance/2,ori="right")
+            lpos_array=self.calc_buff_positions_faster_between(fdate,ldate,interval,distance/2,ori="left")
+        elif ori=="right":
+            rpos_array=self.calc_buff_positions_faster_between(fdate,ldate,interval,distance,ori="right")
+            lpos_array=self.calc_positions_faster_between(fdate,ldate,interval)
+        elif ori=="left":
+            lpos_array=self.calc_buff_positions_faster_between(fdate,ldate,interval,distance,ori="left")
+            rpos_array=self.calc_positions_faster_between(fdate,ldate,interval)
+        else:
+            print("The mode is not currently supported.")
+        
+        
+        result=np.vstack([rpos_array,lpos_array[::-1]])
+        print(result.shape)
+        self.output=result
+        self.output_type="polygon"
+        return self.output
+
     def export(self,infile):
         if self.output_type=="line":
             geo_io.create_line_string(infile,self.output)

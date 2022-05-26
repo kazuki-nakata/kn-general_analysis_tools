@@ -184,7 +184,7 @@ def convert_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
     
     if type(lat0).__module__ != "numpy":
         proc=2
-    elif isinstance(lat0.shape,tuple):
+    elif len(lat0.shape)==0:
         proc=2
     else:
         proc=1
@@ -211,7 +211,6 @@ def convert_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
                     [np.zeros(x0.shape), np.zeros(x0.shape), np.ones(x0.shape)]]).transpose([2,0,1])
         
         R = np.matmul(np.matmul(Rz2,Ry),Rz)
-        print(R.shape,dp.shape)
         result= R.dot(dp)
         x=np.diag(result[:,0,:])
         y=np.diag(result[:,1,:])
@@ -242,47 +241,85 @@ def convert_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
         
     return x,y,z
 
-
 def convert_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, x, y, z):
-    py=np.radians(90-lat0)
-    pz=np.radians(lon0)
-    pz2=np.radians(90)
-    p0=np.array([x0,y0,z0])
-    p2=np.array([x,y,z])
 
-    Ry = np.array([[np.cos(py), 0, -np.sin(py)],
-                   [0, 1, 0],
-                   [np.sin(py), 0, np.cos(py)]])
-    
-    Rz = np.array([[np.cos(pz), np.sin(pz), 0],
-                   [-np.sin(pz), np.cos(pz), 0],
-                   [0, 0, 1]])
-    
-    Rz2 = np.array([[np.cos(pz2), np.sin(pz2), 0],
-                   [-np.sin(pz2), np.cos(pz2), 0],
-                   [0, 0, 1]])
-    R = np.linalg.inv(Rz2.dot(Ry).dot(Rz))
-    p1 = R.dot(p2) + p0
+    if type(lat0).__module__ != "numpy":
+        proc=2
+    elif len(lat0.shape)==0:
+        proc=2
+    else:
+        proc=1
 
-    return p1
+    if proc==1:
+        
+        px=np.radians([90 for i in range(x0.shape[0])])
+        py=np.radians(90-lat0)
+        pz=np.radians(lon0)
+        pz2=np.radians([90 for i in range(x0.shape[0])])
+        p2=np.array([x,y,z])
+        p0=np.array([x0,y0,z0])
+        
+        Ry = np.array([[np.cos(py), np.zeros(x0.shape), -np.sin(py)],
+                    [np.zeros(x0.shape), np.ones(x0.shape), np.zeros(x0.shape)],
+                    [np.sin(py), np.zeros(x0.shape), np.cos(py)]]).transpose([2,0,1])
+        
+        Rz = np.array([[np.cos(pz), np.sin(pz), np.zeros(x0.shape)],
+                    [-np.sin(pz), np.cos(pz), np.zeros(x0.shape)],
+                    [np.zeros(x0.shape), np.zeros(x0.shape), np.ones(x0.shape)]]).transpose([2,0,1])
+        
+        Rz2 = np.array([[np.cos(pz2), np.sin(pz2), np.zeros(x0.shape)],
+                    [-np.sin(pz2), np.cos(pz2), np.zeros(x0.shape)],
+                    [np.zeros(x0.shape), np.zeros(x0.shape), np.ones(x0.shape)]]).transpose([2,0,1])
+        
+        R = np.linalg.inv(np.matmul(np.matmul(Rz2,Ry),Rz))
+        result= R.dot(p2)
+        x=np.diag(result[:,0,:])+p0[0]
+        y=np.diag(result[:,1,:])+p0[1]
+        z=np.diag(result[:,2,:])+p0[2]
+    else:
+        px=np.radians(90)
+        py=np.radians(90-lat0)
+        pz=np.radians(lon0)
+        pz2=np.radians(90)
+        p2=np.array([x,y,z])
+        p0=np.array([x0,y0,z0])
+
+        Ry = np.array([[np.cos(py), 0, -np.sin(py)],
+                    [0, 1, 0],
+                    [np.sin(py), 0, np.cos(py)]])
+        
+        Rz = np.array([[np.cos(pz), np.sin(pz), 0],
+                    [-np.sin(pz), np.cos(pz), 0],
+                    [0, 0, 1]])
+        
+        Rz2 = np.array([[np.cos(pz2), np.sin(pz2), 0],
+                    [-np.sin(pz2), np.cos(pz2), 0],
+                    [0, 0, 1]])
+
+        R = np.linalg.inv(Rz2.dot(Ry).dot(Rz))
+        x,y,z = R.dot(p2) + p0
+                
+    return x,y,z
 
 def calc_line_buffer_point(lat0,lon0,h0,lat,lon,h,distance,ori="right"):
     R=6373000.0
     x0, y0, z0 = convert_lla_to_ecef(lat0, lon0, h0, a=R, b=R)
     x, y, z = convert_lla_to_ecef(lat, lon, h, a=R, b=R)    
     p, q, r = convert_ecef_to_enu(x0, y0, z0, lat0, lon0 , h0, x, y, z)
-    
     sign=1
     if ori=="left" : sign=-1
     
     theta=distance/R
     tan_th=np.tan(theta)
     distance2=R*tan_th
-    coef=1/(q**2/(p**2)+1)
+    coef=1/(q*q/(p*p)+1)
     q2 = np.sqrt(distance2**2 * coef)
     q2= sign*q2
     p2 = -q*q2/p
-    r2 = 0
+    if type(lat0).__module__ != "numpy":
+        r2 = 0
+    else:
+        r2 = np.zeros(p2.shape)
 
     buff_ecef=convert_enu_to_ecef(x0, y0, z0, lat0, lon0 , h0, p2, q2, r2)
     lat,lon,h=convert_ecef_to_lla(*buff_ecef, a=R, b=R)
