@@ -1,8 +1,0 @@
-FC = f2py.py
-FFLAGS = --fcompiler=gfortran --compiler=mingw32
-RM = rm -f
-CP = cp -f
-MV = mv -f
-AR = ar crvf
-RANLIB = touch
-#RANLIB = ranlib
