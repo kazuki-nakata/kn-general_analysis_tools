@@ -1,13 +1,8 @@
-from osgeo import gdal,osr,ogr
+from osgeo import gdal, osr, ogr
 import numpy as np
-from PIL import Image
-import zipfile
 import os
-import sys
-import glob
-import pandas as pd
-import xarray as xr
 
+OGRTypes = {int: ogr.OFTInteger, str: ogr.OFTString, float: ogr.OFTReal}
 
 def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no_data, file_type, geomode="proj", geotrans=None, geoproj=None, gcps=None, gcpsrc=None):
     
@@ -88,7 +83,7 @@ def make_north_nsidc_geoinfo(res):
     geoproj = make_geoproj(3411)
     return geotrans, geoproj
 
-def open_generic_binary(infile,in_dtype,out_dtype,band,length,width):
+def open_generic_binary(infile,in_dtype,out_dtype,band,length,width,byte_order):
     with open(infile,mode='rb') as f:
         data= np.fromfile(f, dtype=in_dtype,sep='').astype(out_dtype).reshape(band,length,width)
     if byte_order=='big':
@@ -96,7 +91,7 @@ def open_generic_binary(infile,in_dtype,out_dtype,band,length,width):
     return data
 
 def open_hdf(infile,in_dtype,out_dtype,band,length,width):
-    ds=gdal.Open(hdfpath, gdal.GA_ReadOnly)
+    ds=gdal.Open(infile, gdal.GA_ReadOnly)
     for i,val in enumerate(ds.GetSubDatasets()):
         name=val#[0].split(':')[4]
         ds[name]=gdal.Open(ds.GetSubDatasets()[i][0], gdal.GA_ReadOnly)
@@ -122,10 +117,8 @@ def make_south_nsidc_raster_from_polygon(infile, outfile, width, length, band, f
 #    gdal.RasterizeLayer(ds, [1], source_layer,burn_values=[1])  
     ds.FlushCache()
 
-def create_line_string(infile,latlon_list,epsg=4326):
-    line = ogr.Geometry(ogr.wkbLineString)
-    for latlon in latlon_list:
-        line.AddPoint(latlon[0], latlon[1])
+
+def export_vector_from_geom(infile,geometry,dict=None,epsg=4326):
 
     ext=os.path.splitext(infile)[::-1][0]
 
@@ -142,30 +135,27 @@ def create_line_string(infile,latlon_list,epsg=4326):
     srs =  osr.SpatialReference()
     srs.ImportFromEPSG(epsg)
     
-    # create one layer 
-    layer = ds.CreateLayer("line", srs, ogr.wkbLineString)
-    # Add an ID field
-    idField = ogr.FieldDefn("id", ogr.OFTInteger)
-    layer.CreateField(idField)
+    # create one layer
+
+    layer = ds.CreateLayer("layer", srs, geometry.GetGeometryType())
+    if dict==None:
+        # Add an ID field
+        idField = ogr.FieldDefn("id", ogr.OFTInteger)
+        layer.CreateField(idField)
     # Create the feature and set values
     featureDefn = layer.GetLayerDefn()
     feature = ogr.Feature(featureDefn)
-    feature.SetGeometry(line)
-    feature.SetField("id", 1)
+    feature.SetGeometry(geometry)
+    # feature.SetField("id", 1)
     layer.CreateFeature(feature)
     feature = None
     # Save and close DataSource
     ds = None
 
-def create_polygon(infile,latlon_list,epsg=4326):
-    ring = ogr.Geometry(ogr.wkbLinearRing)
-    for latlon in latlon_list:
-        ring.AddPoint(latlon[0], latlon[1])
-    ring.AddPoint(latlon_list[0][0], latlon_list[0][1])
-    poly = ogr.Geometry(ogr.wkbPolygon)
-    poly.AddGeometry(ring)
-    
+def export_vector_from_geomList(infile, geom_list, attr_dict=None, epsg=4326):
+
     ext=os.path.splitext(infile)[::-1][0]
+    
 
     if ext == ".shp": 
         ftype="ESRI Shapefile"
@@ -180,17 +170,22 @@ def create_polygon(infile,latlon_list,epsg=4326):
     srs =  osr.SpatialReference()
     srs.ImportFromEPSG(epsg)
     
-    # create one layer 
-    layer = ds.CreateLayer("polygon", srs, ogr.wkbPolygon)
-    # Add an ID field
-    idField = ogr.FieldDefn("id", ogr.OFTInteger)
-    layer.CreateField(idField)
-    # Create the feature and set values
+    layer = ds.CreateLayer("layer", srs, geom_list[0].GetGeometryType())
+    if attr_dict==None:
+        idField = ogr.FieldDefn("id", ogr.OFTInteger)
+        layer.CreateField(idField)
+    else:
+        keys=attr_dict.keys()
+        [layer.CreateField(ogr.FieldDefn(key, OGRTypes[type(attr_dict[key][0])])) for key in keys]
+
     featureDefn = layer.GetLayerDefn()
     feature = ogr.Feature(featureDefn)
-    feature.SetGeometry(poly)
-    feature.SetField("id", 1)
-    layer.CreateFeature(feature)
+
+    for i,geom in enumerate(geom_list):
+        feature.SetGeometry(geom)
+        [feature.SetField(key, attr_dict[key][i]) for key in keys]
+        layer.CreateFeature(feature)
     feature = None
     # Save and close DataSource
-    ds = None    
+    ds = None
+
