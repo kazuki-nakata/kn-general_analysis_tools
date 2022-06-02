@@ -183,7 +183,8 @@ def export_vector_from_geomList(infile, geom_list, attr_dict=None, epsg=4326):
 
     for i,geom in enumerate(geom_list):
         feature.SetGeometry(geom)
-        [feature.SetField(key, attr_dict[key][i]) for key in keys]
+        if attr_dict != None:
+            [feature.SetField(key, attr_dict[key][i]) for key in keys]
         layer.CreateFeature(feature)
     feature = None
     # Save and close DataSource

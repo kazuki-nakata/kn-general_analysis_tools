@@ -5,27 +5,45 @@ import pandas as pd
 import xarray as xr
 from math import sin, cos, sqrt, atan2, radians, atan
 
-def get_wgs84_wkt():
-    wgs84_wkt = """
-    GEOGCS["WGS 84",
-        DATUM["WGS_1984",
-            SPHEROID["WGS 84",6378137,298.257223563,
-                AUTHORITY["EPSG","7030"]],
-            AUTHORITY["EPSG","6326"]],
-        PRIMEM["Greenwich",0,
-            AUTHORITY["EPSG","8901"]],
-        UNIT["degree",0.01745329251994328,
-            AUTHORITY["EPSG","9122"]],
-        AUTHORITY["EPSG","4326"]]"""
-    return wgs84_wkt
+def get_stereographic_proj4(lat0,lon0,false_e,false_n):
+    proj4='+proj=stere +lat_0='+str(lat0)+' +lon_0=' +str(lon0) +' +x_0='+ str(false_e) +' +y_0=' + str(false_n)
+    return proj4
+
+def get_orthographic_proj4(lat0,lon0,false_e,false_n):
+    proj4='+proj=ortho +lat_0='+str(lat0)+' +lon_0=' +str(lon0) +' +x_0='+ str(false_e) +' +y_0=' + str(false_n)
+    return proj4
+
+def get_shifted_wgs84_proj4(lon0):
+    proj4='+proj=longlat +pm=' + str(lon0) + ' +datum=WGS84 +no_defs'
+    return proj4
+
+def get_coord_transform_epsg(source_epsg, target_epsg):
+    source_ref = osr.SpatialReference()
+    target_ref = osr.SpatialReference()
+    source_ref.ImportFromEPSG(source_epsg)
+    target_ref.ImportFromEPSG(target_epsg)
+    return osr.CoordinateTransformation(source_ref, target_ref) 
+
+def get_coord_transform_wkt(source_wkt, target_wkt):
+    source_ref = osr.SpatialReference()
+    target_ref = osr.SpatialReference()
+    source_ref.ImportFromWkt(source_wkt)
+    target_ref.ImportFromWkt(target_wkt)
+    return osr.CoordinateTransformation(source_ref, target_ref) 
+
+def get_coord_transform_proj4(source_epsg, target_epsg):
+    source_ref = osr.SpatialReference()
+    target_ref = osr.SpatialReference()
+    source_ref.ImportFromProj4(source_epsg)
+    target_ref.ImportFromProj4(target_epsg)
+    return osr.CoordinateTransformation(source_ref, target_ref) 
 
 def get_latlons_from_raster(raster,interval):
     # create the new coordinate system
     old_cs= osr.SpatialReference()
     old_cs.ImportFromWkt(raster.GetProjectionRef())
-    wgs84_wkt = get_wgs84_wkt()
     new_cs = osr.SpatialReference()
-    new_cs.ImportFromWkt(wgs84_wkt)
+    new_cs.ImportFromEPSG(4326)
 
     transform = osr.CoordinateTransformation(old_cs,new_cs) 
 

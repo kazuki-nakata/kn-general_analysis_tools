@@ -40,7 +40,7 @@ def create_multiPolygon(latlon_list): #or latlon_array [n_polygon, n_point, 2(la
     multipoly = ogr.Geometry(ogr.wkbMultiPolygon)
     for polygon in latlon_list:
         ring=ogr.Geometry(ogr.wkbLinearRing)
-        [ring.AddPoint(point[0], point[1]) for point in polygon]
+        [ring.AddPoint(point[1], point[0]) for point in polygon]
         poly = ogr.Geometry(ogr.wkbPolygon)
         poly.AddGeometry(ring)
         multipoly.AddGeometry(poly)
@@ -52,6 +52,13 @@ def find_intersect_polygons(poly1,poly2_list):
     # poly2_intersect=[poly2.Intersection(poly1) for poly2 in poly2_init_intersect]
     # poly2_init_intersect2=[polyA for polyA,polyB in zip(poly2_init_intersect,poly2_intersect) if polyB != None and polyB.Area()>0]
     # poly2_intersect2=[poly for poly in poly2_intersect if poly != None and poly.Area()>0]
+    # poly2_intersect0=[]
+    # for poly2 in poly2_list:
+    #     print(poly2)
+    #     print("hi")
+    #     print(poly2.Intersection(poly1))
+    #     test=poly2.Intersection(poly1)
+    #     poly2_intersect0.append(test)
     poly2_intersect0=[poly2.Intersection(poly1) for poly2 in poly2_list]
     poly2_intersect_bool=[True if poly != None and poly.Area()>0 else False for poly in poly2_intersect0] 
     poly2_intersect=[poly for poly in poly2_intersect0 if poly != None and poly.Area()>0]

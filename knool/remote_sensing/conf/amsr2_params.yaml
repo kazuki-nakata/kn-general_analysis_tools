@@ -1,0 +1,5 @@
+satellite: "GCOM-W1 (SHIZUKU)"
+obs_direction: "middle"
+obs_width: 1450000
+obs_offset: 0
+
