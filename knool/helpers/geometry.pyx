@@ -1,3 +1,4 @@
+#cythonize -i geometry.pyx, not cythonize -b. the latter results in memory error.
 import numpy as np
 import cython
 cimport numpy as np

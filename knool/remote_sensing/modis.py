@@ -197,14 +197,14 @@ class MXD35_L2:
 
         self.output = None
 
-        basename = os.path.basename(hdfpath)
-        dirname = os.path.dirname(hdfpath)
+        self.basename = os.path.basename(hdfpath)
+        self.dirname = os.path.dirname(hdfpath)
 
         self.product = "Cloud mask Level 2"
 
         self.ds = gdal.Open(hdfpath, gdal.GA_ReadOnly)
         self.subdsID = {}
-        for i, val in enumerate(self.ds.GetSubDatasets()[0:8]):
+        for i, val in enumerate(self.ds.GetSubDatasets()):
             name = val[0].split(":")[4]
             self.subdsID[name] = i
 
