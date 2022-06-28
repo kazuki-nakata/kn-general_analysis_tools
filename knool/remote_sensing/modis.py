@@ -1,25 +1,22 @@
 from osgeo import gdal
-import glob
 import numpy as np
 import os
-import matplotlib.pyplot as plt
-import hydra
-from ..helpers.misc import deco_import_config, import_config, deco_print_time
+from ..helpers.misc import import_config
 from . import thermal_sensor_process
 from ..geodata_processor import geo_info, geo_io
 
 
 class MXD021KM:
     def __init__(self, hdfpath=None, hdfpath_mxd03=None, read=None):
-        if hdfpath == None:
+        if hdfpath is None:
             return
 
         self.output = None
 
         self.params = import_config(config_path=os.path.dirname(__file__) + os.sep + "conf/modis_params.yaml")
 
-        basename = os.path.basename(hdfpath)
-        dirname = os.path.dirname(hdfpath)
+        self.basename = os.path.basename(hdfpath)
+        self.dirname = os.path.dirname(hdfpath)
 
         self.product = "Level 1B"
         self.ref_name = "EV_1KM_RefSB"
@@ -155,8 +152,8 @@ class MXD29:
 
         self.output = None
 
-        basename = os.path.basename(hdfpath)
-        dirname = os.path.dirname(hdfpath)
+        self.basename = os.path.basename(hdfpath)
+        self.dirname = os.path.dirname(hdfpath)
 
         self.product = "SeaIceProduct Level 2"
 
@@ -197,14 +194,14 @@ class MXD35_L2:
 
         self.output = None
 
-        basename = os.path.basename(hdfpath)
-        dirname = os.path.dirname(hdfpath)
+        self.basename = os.path.basename(hdfpath)
+        self.dirname = os.path.dirname(hdfpath)
 
         self.product = "Cloud mask Level 2"
 
         self.ds = gdal.Open(hdfpath, gdal.GA_ReadOnly)
         self.subdsID = {}
-        for i, val in enumerate(self.ds.GetSubDatasets()[0:8]):
+        for i, val in enumerate(self.ds.GetSubDatasets()):
             name = val[0].split(":")[4]
             self.subdsID[name] = i
 
