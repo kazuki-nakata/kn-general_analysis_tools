@@ -4,7 +4,7 @@ import os
 from ..helpers.misc import import_config
 from . import thermal_sensor_process
 from ..geodata_processor import geo_info, geo_io
-
+from pyhdf.SD import SD, SDC
 
 class MXD021KM:
     def __init__(self, hdfpath=None, hdfpath_mxd03=None, read=None):
@@ -38,17 +38,30 @@ class MXD021KM:
                 self.subdsProd[name] = "MXD021KM"
 
         else:
+            self.hdfpath_mxd03 = hdfpath_mxd03
             self.ds_mxd03 = gdal.Open(hdfpath_mxd03, gdal.GA_ReadOnly)
-            for i, val in enumerate(self.ds_mxd03.GetSubDatasets()[3:11]):
+            for i, val in enumerate(self.ds_mxd03.GetSubDatasets()):
                 name = val[0].split(":")[4]
-                self.subdsID[name] = i + 3
+                self.subdsID[name] = i
                 self.subdsProd[name] = "MXD03"
+
 
         if read == "em":
             self.read_em()
         elif read == "ref":
             self.read_ref()
 
+    def get_latlon_array(self):
+        if self.hdfpath_mxd03 is not None:
+            hdf_geo = SD(self.hdfpath_mxd03, SDC.READ)
+            lat = hdf_geo.select('Latitude')
+            latitude = lat[:,:]
+            lon = hdf_geo.select('Longitude')
+            longitude = lon[:,:]
+            return latitude,longitude
+        else:
+            print("Specify MXD03 product together with MXD021KM")
+    
     def get_subds(self, subdsID, product_name):
         if product_name == "MXD021KM":
             ds = gdal.Open(self.ds.GetSubDatasets()[subdsID][0], gdal.GA_ReadOnly)

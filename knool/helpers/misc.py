@@ -2,10 +2,15 @@
 import time
 from hydra import compose, initialize_config_dir
 import os
+from datetime import datetime, timedelta
 
 # %%
 
 
+def hour_rounder(t):
+    return (t.replace(second=0, microsecond=0, minute=0, hour=t.hour)
+               +timedelta(hours=t.minute//30))
+    
 def deco_print_time(start_message: str, end_message: str):
     def _print_args(func):
         def new_function(*args, **kwargs):
