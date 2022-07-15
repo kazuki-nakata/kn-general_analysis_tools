@@ -1,16 +1,22 @@
-atmosphere:
+air:
   rho: 1.3 #density
   cp: 1004 #capa
-ocean:
+seawater:
   tf: -1.86
-  em_lw: 0.97 #emissivity for longwave
+  em: 0.97 #thermal emissivity
+  albedo: 0.06
 seaice:
   rho: 920 #density [kg/m3]
   lf: 3.34E+5 #latent heat for freezing
-  ck: 2.04 #ice thermal conductivity
-  em_lw: 0.99 #emissivity for longwave
+  ck: 2.04 #ice thermal conductivity (WmK-1)
+  em: 0.99 #thermal emissivity
+  cs_ce_thin_Yu1996: 0.003 #bulk transfer cofficients for very thin ice (Yu and Rothrock 1996)
+  cs_ce_thick_Yu1996: 0.00175 #bulk transfer cofficient for thick ice (Yu and Rothrock 1996)
+  albedo_0_10cm: 0.27 #based on Maykut (1986) and Allison et al.(1993)
+  albedo_10_20cm: 0.36 #based on Maykut (1986) and Allison et al.(1993)
+  albedo_bare_20gt: 0.7 #bare ice typically has albedo  of 0.5-0.7
 snow:
-  ck: 0.31 #snow thermal condictivity
-  em_lw: 0.99 #emissivity for longwave
+  ck: 0.31 #snow thermal condictivity(WmK-1),    0.3 for Sturm and others (1997)
+  em: 0.99 #thermal emissivity
 general:
-  sig: 5.67E-8 #Stefan-Boltzmann constant
+  sb_const: 5.67E-8 #Stefan-Boltzmann constant

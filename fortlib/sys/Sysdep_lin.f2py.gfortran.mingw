@@ -1,0 +1,12 @@
+PC = f2py
+FC = gfortran
+CC = gcc
+FFLAGS = -static-libgfortran
+PFFLAGS = --fcompiler=gnu95 --f90flags="-static-libgfortran"
+RM = rm -f
+CP = cp -f
+MV = mv -f
+AR = ar crvf
+RANLIB = touch
+DELIMITER= /
+#RANLIB = ranlib
