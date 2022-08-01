@@ -530,17 +530,17 @@ SUBROUTINE moving_average(width,length,band,mask,mask2,wsize,data)
    data(:,:,:)=dum(:,:,:)
 END SUBROUTINE moving_average
 
-SUBROUTINE Interpolation_type2(inval,isize2,jsize2,inlat,inlon,isize,jsize,ymin,xmin,yint,xint,output)
+SUBROUTINE Interpolation_type2(inval,isize2,jsize2,ksize2,inlat,inlon,isize,jsize,ymin,xmin,yint,xint,output)
    IMPLICIT NONE
    INTEGER :: i,j,ii,jj,k
    iNTEGER :: ipos,jpos,ipos2,jpos2
    REAL(4) :: dx,dy
-   INTEGER(4),INTENT(IN) :: jsize,isize,isize2,jsize2
+   INTEGER(4),INTENT(IN) :: jsize,isize,isize2,jsize2,ksize2
    REAL(4),INTENT(IN) :: xmin,ymin,xint,yint
    REAL(4),INTENT(IN) :: inlat(1:isize,1:jsize),inlon(1:isize,1:jsize)
-   REAL(4),INTENT(IN) :: inval(1:isize2,1:jsize2)
+   REAL(4),INTENT(IN) :: inval(1:ksize2,1:isize2,1:jsize2)
    REAL(4) :: rlon(1:jsize2),rlat(1:isize2)
-   INTEGER(4),INTENT(OUT):: output(1:isize,1:jsize)
+   REAL(4),INTENT(OUT):: output(1:ksize2,1:isize,1:jsize)
 
    rlon(1:jsize2) = (/ (xmin+xint*(i-1),i=1,jsize2) /)
    where(rlon > 360.)
@@ -555,8 +555,8 @@ SUBROUTINE Interpolation_type2(inval,isize2,jsize2,inlat,inlon,isize,jsize,ymin,
          do jj = 2, jsize2
             if((inlon(i,j) > rlon(jj-1)) .and. &
                   (inlon(i,j) <= rlon(jj))) then
-               ipos=jj
-               ipos2=jj-1
+               jpos=jj
+               jpos2=jj-1
             endif
          enddo
 
@@ -564,8 +564,8 @@ SUBROUTINE Interpolation_type2(inval,isize2,jsize2,inlat,inlon,isize,jsize,ymin,
          do ii = 2, isize2
             if((inlat(i,j) > rlat(ii-1)) .and. &
                   (inlat(i,j) <= rlat(ii))) then
-            ipos=ii
-            ipos2=ii-1
+            ipos=ii!isize2-ii+1
+            ipos2=ii-1!isize2-ii+2
             endif
          enddo
 
@@ -574,29 +574,26 @@ SUBROUTINE Interpolation_type2(inval,isize2,jsize2,inlat,inlon,isize,jsize,ymin,
             jpos=jsize2
          endif
 
-         if(jpos == -999) then
-            cycle
-         endif
-
          if(ipos == -999) then
          dx=(inlon(i,j)-rlon(jpos2))  / ((rlon(jpos)+360.)-rlon(jpos2))
-         dy=(inlat(i,j)-rlat(ipos2))  / (rlat(ipos)-rlat(ipos2))
+         dy=(inlat(i,j)-rlat(1))  / (rlat(2)-rlat(ipos2))
             else
          dx=(inlon(i,j)-rlon(jpos2)) / (rlon(jpos)-rlon(jpos2))
          dy=(inlat(i,j)-rlat(ipos2))  / (rlat(ipos)-rlat(ipos2))
          endif
-         print *,ipos,ipos2,jpos,jpos2,isize2,jsize2
-         ! do k = 1, 1!Nvars
-         !    output(i,j) = bilin(dy,dx,Undef, &
-         !                   inval(ipos2,jpos2), &
-         !                   inval(ipos  ,jpos2), &
-         !                   inval(ipos  ,jpos ), &
-         !                   inval(ipos2,jpos  ))
-         ! enddo
+
+         ipos =isize2-ipos+1
+         ipos2=isize2-ipos2+1
+
+         do k = 1, ksize2
+            output(k,i,j) = bilin(dy,dx,Undef, &
+                           inval(k,ipos,jpos2), &
+                           inval(k,ipos ,jpos), &
+                           inval(k,ipos2  ,jpos ), &
+                           inval(k,ipos2,jpos2  ))
+         enddo
       enddo
-      
       enddo
-      output(:,:)=0.
 END SUBROUTINE Interpolation_Type2
 
 function bilin(dx,dy,Undef,var1,var2,var3,var4)

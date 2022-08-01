@@ -60,7 +60,7 @@ def calc_swave(al, clo, td2m, jday, lat, hour):
     return q2
 
 
-def calc_lwave_MC1973(clo, st, t2m, em):
+def calc_lwave_MC1973(clo, st, t2m, em):  # maykut and churtch 1973 by alaska data
     # --- incoming longwave radiation ---
     ila = (
         0.7855 * (1.0 + 0.2232 * clo**2.75) * params["general"]["sb_const"] * t2m**4.0
@@ -69,13 +69,13 @@ def calc_lwave_MC1973(clo, st, t2m, em):
     return ila, ola
 
 
-def calc_lwave_KA1994(clo, st, t2m, em):  # Koenig-Langlo and Augstein, 1994
+def calc_lwave_KA1994(clo, st, t2m, em):  # Koenig-Langlo and Augstein, 1994 by polar region data
     ila = (0.765 + 0.22 * clo**3.0) * params["general"]["sb_const"] * t2m**4
     ola = -(em * params["general"]["sb_const"] * st**4)
     return ila, ola
 
 
-def calc_lwave_G1997(clo, st, t2m, em):  # Guest（1997）for antarctic?
+def calc_lwave_G1998(clo, st, t2m, em):  # Guest（1997）by weddell data
     ila = (params["general"]["sb_const"] * t2m**4 - 85.6) * (1 + 0.26 * clo)
     ola = -(em * params["general"]["sb_const"] * st**4)
     return ila, ola
@@ -190,7 +190,9 @@ def calc_theat_O2003(ti, tw, wg, ic, t2m, td2m, slp):
 
 # fmt: off
 def convert_thermal_ice_thickness(q, ti, hs, tb):
-    hi = (params["seaice"]["ck"] * params["snow"]["ck"] / q * (ti - tb) - params["seaice"]["ck"] * hs) / params["snow"]["ck"]
+    cki = params["seaice"]["ck"]
+    cks = params["snow"]["ck"]
+    hi = np.where(q > 0, 1.0, (cki * cks / q * (ti - tb) - cki * hs) / cks)
     return hi
 # fmt: on
 
@@ -199,7 +201,7 @@ def convert_thermal_ice_thickness(q, ti, hs, tb):
 def calc_thermal_ice_properties(slp, t2m, td2m, w10m, ic, cl, tw, lat, jday, hour, hs, ti,
     lw_func=calc_lwave_MC1973,
     sw_func=None,
-    th_func=calc_theat_K1975,
+    th_func=calc_theat_O2003,
     test=False):
 
     emi = params["seaice"]["em"]
@@ -214,7 +216,8 @@ def calc_thermal_ice_properties(slp, t2m, td2m, w10m, ic, cl, tw, lat, jday, hou
 
     if lw_func is not None:
         if lw_func.__name__ == "calc_lwave_J2006":
-            lw_func(cl)
+            ilw_ice, olw_ice = lw_func(ti, t2m, td2m, emi)
+            ilw_water, olw_water = lw_func(ti, t2m, td2m, emw)
         else:
             ilw_ice, olw_ice = lw_func(cl, ti, t2m, emi)
             ilw_water, olw_water = lw_func(cl, tw, t2m, emw)
