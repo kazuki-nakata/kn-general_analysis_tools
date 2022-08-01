@@ -352,6 +352,16 @@ def convert_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, x, y, z):
 
     return x, y, z
 
+def convert_lla_to_rotated_enu(lat0, lon0, eaz, lat, lon): #eaz: Earth Azimuth
+    R = 6373000.0
+    x0, y0, z0 = geo_info.convert_lla_to_ecef(lat0, lon0, 0, a=R, b=R)
+    x, y, z = geo_info.convert_lla_to_ecef(lat, lon, 0, a=R, b=R)
+    p, q, r = geo_info.convert_ecef_to_enu(x0, y0, z0, lat0, lon0, 0, x, y, z)
+    rad = np.radians(eaz)
+    q2=np.cos(rad)*q+np.sin(rad)*p
+    p2=np.cos(rad)*p-np.sin(rad)*q
+    return p2, q2, r
+
 
 def calc_line_buffer_point(lat0, lon0, h0, lat, lon, h, distance, ori="right"):
     R = 6373000.0

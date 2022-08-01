@@ -37,7 +37,10 @@ class AMSR2_L1R:
     def get_subds(self, subdsID):
         ds = gdal.Open(self.ds.GetSubDatasets()[subdsID][0], gdal.GA_ReadOnly)
         return ds
-
+    
+    def get_brightness_temperature(self, subdsID):
+        return self.get_subds(subdsID).ReadAsArray()[self.clip_array] * 0.01
+    
     def get_latlon(self, resolution="low"):
         # Positions of all resample data in L1R product are ajusted so as to they is consistent with latlons of 89A.
         lat = self.get_subds(self.subdsID["Latitude_of_Observation_Point_for_89A"]).ReadAsArray()[self.clip_array]
@@ -46,7 +49,12 @@ class AMSR2_L1R:
             lat = lat[:, 0::2]
             lon = lon[:, 0::2]
         return lat, lon
-
+    
+    def get_earth_azimuth(self):
+        eaz=self.get_subds(self.subdsID["Earth_Azimuth"]).ReadAsArray()[self.clip_array]*0.01
+        self.output=eaz
+        return eaz
+    
     def get_land_ocean_flag(self, resolution="36GHz"):
         num = {"6GHz": 0, "10GHz": 1, "18GHz": 2, "36GHz": 3}
         loflag = self.get_subds(self.subdsID["Land_Ocean_Flag_6_to_36"]).ReadAsArray()[num[resolution]][self.clip_array]
