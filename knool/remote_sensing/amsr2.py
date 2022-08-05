@@ -63,23 +63,16 @@ class AMSR2_L1R:
         self.output = loflag
         return loflag
 
-    def set_output_prop(self):
+    def set_output_prop(self,gcp_x=20,gcp_y=10):
         lat, lon = self.get_latlon()
         length, width = lat.shape
 
         gcps = []
-        for ai in np.linspace(0, length - 1, 5):
-            for aj in np.linspace(0, width - 1, 10):
+        for ai in np.linspace(0, length - 1, gcp_y):
+            for aj in np.linspace(0, width - 1, gcp_x):
                 i = int(ai)
                 j = int(aj)
-                # print(lat[i][0],lon[i][0], 0, i+1, 1)
-                print(i, length, j, width, float(lon[i][j]), float(lat[i][j]))
                 gcps.append(gdal.GCP(float(lon[i][j]), float(lat[i][j]), 0.0, j + 0.5, i + 0.5))
-
-        # gcps.append(
-        # gdal.GCP(float(lon[i][int(width / 2)]), float(lat[i][int(width / 2)]), 0, int(width / 2) + 0.5, i + 0.5)
-        # )
-        # gcps.append(gdal.GCP(float(lon[i][width - 1]), float(lat[i][width - 1]), 0, width - 1 + 0.5, i + 0.5))
 
         source_ref = osr.SpatialReference()
         source_ref.ImportFromEPSG(4326)

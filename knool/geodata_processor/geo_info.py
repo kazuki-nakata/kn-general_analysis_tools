@@ -261,10 +261,11 @@ def convert_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
         ).transpose([2, 0, 1])
 
         R = np.matmul(np.matmul(Rz2, Ry), Rz)
-        result = R.dot(dp)
-        x = np.diag(result[:, 0, :])
-        y = np.diag(result[:, 1, :])
-        z = np.diag(result[:, 2, :])
+        # result = R.dot(dp)
+        x,y,z=np.einsum("kij,jk->ik", R, dp)
+        # x = np.diag(result[:, 0, :])
+        # y = np.diag(result[:, 1, :])
+        # z = np.diag(result[:, 2, :])
 
     else:
         # px = np.radians(90)
