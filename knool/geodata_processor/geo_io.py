@@ -12,6 +12,7 @@ def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no
     data_mask = np.where(data == no_data, np.NaN, data)
     driver = gdal.GetDriverByName(file_type)
     ds = driver.Create(filepath, pixel_x, pixel_y, num_band, dtype)
+
     if num_band == 1:
         band = ds.GetRasterBand(1)
         band.WriteArray(data_mask)
@@ -29,6 +30,10 @@ def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no
         ds.SetProjection(geoproj)
     elif geomode == "gcp":
         ds.SetGCPs(gcps, gcpsrc)
+
+    ds.SetMetadata({'TIFFTAG_COPYRIGHT': 'KN_TOOL'}) 
+    ds.SetMetadata({'TIFFTAG_XRESOLUTION': '1/1'})
+    ds.SetMetadata({'TIFFTAG_YRESOLUTION': '1/1'})
 
     ds.FlushCache()
     return ds
