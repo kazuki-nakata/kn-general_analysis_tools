@@ -1,8 +1,8 @@
 from osgeo import gdal, osr
 import numpy as np
 import os
-from ..helpers.misc import import_config
-from ..geodata import geo_info, geo_io
+from ...helpers.misc import import_config
+from ...geodata import geo_info, geo_io
 
 
 class AMSR2_L1R:

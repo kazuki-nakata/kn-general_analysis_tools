@@ -1,9 +1,9 @@
 from osgeo import gdal, osr
 import numpy as np
 import os
-from ..helpers.misc import import_config
-from . import thermal_sensor_process
-from ..geodata import geo_info, geo_io
+from ...helpers.misc import import_config
+from ..algorithm import thermal_sensor_process
+from ...geodata import geo_info, geo_io
 from pyhdf.SD import SD, SDC
 
 
