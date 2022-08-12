@@ -137,16 +137,17 @@ def calc_transfer_coeffs_K1975(wg, t2m, tsfc):
     )
 
     # --- 安定度 ---
-    s0 = (tsfc - t2m) * wg ** (-2)
-    s = s0 * (np.abs(s0) / (np.abs(s0) + 0.01))
     dtsfc = tsfc - t2m
+    s0 = dtsfc * wg ** (-2)
+    s = s0 * (np.abs(s0) / (np.abs(s0) + 0.01))
+
     # ---calc transfer coefficients----------------------
     ch = np.where(
         dtsfc == 0,
         cha,  # 中立
         np.where(
             dtsfc > 0,
-            cha * (1.0 + 0.63 * np.sqrt(s)),  # 不安定
+            cha * (1.0 + 0.63 * np.sqrt(np.abs(s))),  # 不安定。np.absはwarning出力を抑えるため。
             np.where((s > -3.3) & (s < 0.0), cha * (0.1 + 0.03 * s + 0.9 * np.exp(4.8 * s)), 0),
         ),
     )  # 安定
@@ -156,7 +157,7 @@ def calc_transfer_coeffs_K1975(wg, t2m, tsfc):
         cea,  # 中立
         np.where(
             dtsfc > 0,
-            cea * (1.0 + 0.63 * np.sqrt(s)),  # 不安定
+            cea * (1.0 + 0.63 * np.sqrt(np.abs(s))),  # 不安定
             np.where((s > -3.3) & (s < 0.0), cea * (0.1 + 0.03 * s + 0.9 * np.exp(4.8 * s)), 0),
         ),
     )  # 安定

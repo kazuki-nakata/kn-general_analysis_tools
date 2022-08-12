@@ -2,7 +2,7 @@ from osgeo import gdal, osr
 import numpy as np
 import os
 from ..helpers.misc import import_config
-from ..geodata_processor import geo_info, geo_io
+from ..geodata import geo_info, geo_io
 
 
 class AMSR2_L1R:
@@ -63,7 +63,7 @@ class AMSR2_L1R:
         self.output = loflag
         return loflag
 
-    def set_output_prop(self,gcp_x=20,gcp_y=10):
+    def set_output_prop(self, gcp_x=20, gcp_y=10):
         lat, lon = self.get_latlon()
         length, width = lat.shape
 

@@ -25,19 +25,35 @@ def reproject(ds, outfile="/vsimem/output.tif", epsg_str="EPSG:4326", NODATA_VAL
     return output_ds
 
 
-def reproject_gcp(ds, outfile="/vsimem/output.tif", src_epsg_str="EPSG:4326", dst_epsg_str="EPSG:4326", resample_alg="near", NODATA_VALUE=-999):
-    #念のためにbound計算しているがいらないかもしれない。
-    gcps=ds.GetGCPs()
-    trans=geo_info.get_coord_transform_epsg(int(src_epsg_str[5:]),int(dst_epsg_str[5:]))
-    gcp_list=[]
-    for gcp in gcps:    
-        gcp_list.append(trans.TransformPoint(gcp.GCPX,gcp.GCPY)[0:2])
-    gcp_array=np.array([gcp_list])
-    x_min,y_min=np.min(gcp_array,axis=1)[0]
-    x_max,y_max=np.max(gcp_array,axis=1)[0]
-    bound=(x_min,y_min,x_max,y_max)   
-    
-    output_ds = gdal.Warp(outfile, ds, srcSRS=src_epsg_str, dstSRS=dst_epsg_str, resampleAlg=resample_alg, dstNodata=NODATA_VALUE, tps=True, outputBounds=bound)
+def reproject_gcp(
+    ds,
+    outfile="/vsimem/output.tif",
+    src_epsg_str="EPSG:4326",
+    dst_epsg_str="EPSG:4326",
+    resample_alg="near",
+    NODATA_VALUE=-999,
+):
+    # 念のためにbound計算しているがいらないかもしれない。
+    gcps = ds.GetGCPs()
+    trans = geo_info.get_coord_transform_epsg(int(src_epsg_str[5:]), int(dst_epsg_str[5:]))
+    gcp_list = []
+    for gcp in gcps:
+        gcp_list.append(trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2])
+    gcp_array = np.array([gcp_list])
+    x_min, y_min = np.min(gcp_array, axis=1)[0]
+    x_max, y_max = np.max(gcp_array, axis=1)[0]
+    bound = (x_min, y_min, x_max, y_max)
+
+    output_ds = gdal.Warp(
+        outfile,
+        ds,
+        srcSRS=src_epsg_str,
+        dstSRS=dst_epsg_str,
+        resampleAlg=resample_alg,
+        dstNodata=NODATA_VALUE,
+        tps=True,
+        outputBounds=bound,
+    )
     return output_ds
 
 
@@ -72,10 +88,10 @@ def edit_tifftag(ds, option_str=None, tag_dict=None, outfile="/vsimem/output.tif
     # For example, tag_dict={"TIFFTAG_YRESOLUTION":"1", "TIFFTAG_RESOLUTIONUNIT":"None"}
     if tag_dict is not None:
         for name in tag_dict.keys():
-            ds.SetMetadataItem(name,tag_dict[name])
-               
-    output_ds=gdal.Translate(outfile, ds, options=option_str)
-    
+            ds.SetMetadataItem(name, tag_dict[name])
+
+    output_ds = gdal.Translate(outfile, ds, options=option_str)
+
     return output_ds
 
 

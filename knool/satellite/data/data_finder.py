@@ -4,7 +4,7 @@ from datetime import datetime as dt
 from datetime import timedelta
 import pandas as pd
 from . import satellite
-from ..geodata_processor import geo_info, geo_table
+from ..geodata import geo_info, geo_table
 from skyfield.api import utc
 import geopandas as gpd
 

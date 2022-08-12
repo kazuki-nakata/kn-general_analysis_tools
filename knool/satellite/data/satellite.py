@@ -4,7 +4,7 @@ import pandas as pd
 from skyfield.api import load
 from datetime import timedelta
 from skyfield.api import utc
-from ..geodata_processor import geo_io, geo_info, geo_geom
+from ..geodata import geo_io, geo_info, geo_geom
 from ..helpers.misc import import_config
 
 

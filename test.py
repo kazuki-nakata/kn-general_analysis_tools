@@ -1,4 +1,4 @@
 # -*- coding: utf-8 -*-
-import knool.remote_sensing as kr
-kr.read_modis
+import knool.satellite.data as satdata
 
+satdata.read_modis

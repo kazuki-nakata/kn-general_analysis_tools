@@ -1,9 +1,9 @@
-from osgeo import gdal
+from osgeo import gdal, osr
 import numpy as np
 import os
 from ..helpers.misc import import_config
 from . import thermal_sensor_process
-from ..geodata_processor import geo_info, geo_io
+from ..geodata import geo_info, geo_io
 from pyhdf.SD import SD, SDC
 
 
@@ -152,6 +152,22 @@ class MXD021KM:
         self.output = ist
         self.output_prop = geo_info.get_property_from_raster_with_gcps(self.ds_em)
         return ist
+
+    def set_output_prop(self, gcp_x=20, gcp_y=10):
+        lat, lon = self.get_latlon_array()
+        length, width = lat.shape
+
+        gcps = []
+        for ai in np.linspace(0, length - 1, gcp_y):
+            for aj in np.linspace(0, width - 1, gcp_x):
+                i = int(ai)
+                j = int(aj)
+                gcps.append(gdal.GCP(float(lon[i][j]), float(lat[i][j]), 0.0, j + 0.5, i + 0.5))
+
+        source_ref = osr.SpatialReference()
+        source_ref.ImportFromEPSG(4326)
+
+        self.output_prop = [width, length, source_ref, gcps]
 
     def export_output(self, filepath, no_data=None, file_type="GTiff", dtype=gdal.GDT_Float32):
         geo_io.make_raster_with_gcps_from_array(self.output, filepath, dtype, no_data, self.output_prop, file_type)

@@ -19,10 +19,13 @@ ENV PATH $PATH:/root/anaconda3/bin
 
 WORKDIR /tmp/
 
-COPY geospatial_data_processor .
-COPY image_processor .
-COPY analyzer .
-COPY satellite_remote_sensing .
+COPY geodata .
+COPY image .
+COPY analysis .
+COPY satellite .
+COPY helpers .
+COPY geophysics .
+
 COPY tests .
 COPY requirements.txt .
 COPY setup.py .
