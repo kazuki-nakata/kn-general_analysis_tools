@@ -23,6 +23,7 @@ def get_shifted_wgs84_proj4(lon0):
     return proj4
 
 
+# 注意！！！！本結果を用いてtrans.transformpointを実施してinfが出力された場合xとyを入れ替える。gdal未修正箇所。今後アップデートされるかも
 def get_coord_transform_epsg(source_epsg, target_epsg):
     source_ref = osr.SpatialReference()
     target_ref = osr.SpatialReference()
@@ -31,6 +32,7 @@ def get_coord_transform_epsg(source_epsg, target_epsg):
     return osr.CoordinateTransformation(source_ref, target_ref)
 
 
+# 注意！！！！本結果を用いてtrans.transformpointを実施してinfが出力された場合xとyを入れ替える。gdal未修正箇所。今後アップデートされるかも
 def get_coord_transform_wkt(source_wkt, target_wkt):
     source_ref = osr.SpatialReference()
     target_ref = osr.SpatialReference()
@@ -39,6 +41,7 @@ def get_coord_transform_wkt(source_wkt, target_wkt):
     return osr.CoordinateTransformation(source_ref, target_ref)
 
 
+# 注意！！！！本結果を用いてtrans.transformpointを実施してinfが出力された場合xとyを入れ替える。gdal未修正箇所。今後アップデートされるかも
 def get_coord_transform_proj4(source_proj4, target_proj4):
     source_ref = osr.SpatialReference()
     target_ref = osr.SpatialReference()
@@ -47,7 +50,7 @@ def get_coord_transform_proj4(source_proj4, target_proj4):
     return osr.CoordinateTransformation(source_ref, target_ref)
 
 
-def get_latlons_from_raster(raster, interval):
+def get_latlons_from_raster(raster, interval=1):
     # create the new coordinate system
     old_cs = osr.SpatialReference()
     old_cs.ImportFromWkt(raster.GetProjectionRef())

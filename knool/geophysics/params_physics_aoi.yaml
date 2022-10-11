@@ -20,3 +20,4 @@ snow:
   em: 0.99 #thermal emissivity
 general:
   sb_const: 5.67E-8 #Stefan-Boltzmann constant
+

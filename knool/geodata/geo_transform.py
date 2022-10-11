@@ -3,7 +3,7 @@ import os
 import numpy as np
 from . import ogr2ogr
 from . import gdal_merge as merge
-from . import geo_info
+from . import geo_info, geo_io
 
 OGRTypes = {int: ogr.OFTInteger, str: ogr.OFTString, float: ogr.OFTReal}
 
@@ -25,34 +25,46 @@ def reproject(ds, outfile="/vsimem/output.tif", epsg_str="EPSG:4326", NODATA_VAL
     return output_ds
 
 
-def reproject_gcp(
+def geocode(
     ds,
     outfile="/vsimem/output.tif",
     src_epsg_str="EPSG:4326",
     dst_epsg_str="EPSG:4326",
     resample_alg="near",
-    NODATA_VALUE=-999,
+    trans_bug_correction=False,
+    NODATA_VALUE=None,
 ):
-    # 念のためにbound計算しているがいらないかもしれない。
+    # ds -> raster with GCPs
+    # どの座標系のGCPでもOK。また、GCPに定義されている座標系の変換（再投影）にも対応できるようコーディング。
+    # うまく再投影できない場合は、xとyが逆の可能性あり（gdalのバグ）。その場合はtrans_bug_correctionをTrueにする。
     gcps = ds.GetGCPs()
-    trans = geo_info.get_coord_transform_epsg(int(src_epsg_str[5:]), int(dst_epsg_str[5:]))
-    gcp_list = []
+    src_epsg = int(src_epsg_str[5:])
+    dst_epsg = int(dst_epsg_str[5:])
+    target_ref = osr.SpatialReference()
+    target_ref.ImportFromEPSG(dst_epsg)
+    trans = geo_info.get_coord_transform_epsg(src_epsg, dst_epsg)
+
+    gcps2 = []
     for gcp in gcps:
-        gcp_list.append(trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2])
-    gcp_array = np.array([gcp_list])
-    x_min, y_min = np.min(gcp_array, axis=1)[0]
-    x_max, y_max = np.max(gcp_array, axis=1)[0]
-    bound = (x_min, y_min, x_max, y_max)
+        if not trans_bug_correction:
+            x, y = trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2]
+        else:
+            x, y = trans.TransformPoint(gcp.GCPY, gcp.GCPX)[0:2]
+        gcp2 = gdal.GCP(x, y, 0, gcp.GCPPixel, gcp.GCPLine)
+        gcps2.append(gcp2)
+
+    tmp_ds = geo_io.copy_dataset(ds)
+    tmp_ds.SetGCPs(gcps2, target_ref)
 
     output_ds = gdal.Warp(
         outfile,
-        ds,
-        srcSRS=src_epsg_str,
+        tmp_ds,
+        srcSRS=None,  # src_epsg_str,
         dstSRS=dst_epsg_str,
         resampleAlg=resample_alg,
         dstNodata=NODATA_VALUE,
         tps=True,
-        outputBounds=bound,
+        #    outputBounds=bound,
     )
     return output_ds
 
@@ -146,35 +158,74 @@ def raster_to_polygon_with_field(raster, dst_layername, field_name):
     gdal.Polygonize(srcband, srcband, dst_layer, dst_field, ["8CONNECTED=8"])
 
 
-def rasterize_by_raster_with_gcps(source_ds, raster_ds, outfile, file_type="GTiff", out_dtype=gdal.GDT_Float32):
-
-    source_layer = source_ds.GetLayer()
-
+def rasterize_by_raster_with_gcps(
+    raster_ds,
+    poly_ds,
+    outfile="/vsimem/output.tif",
+    src_epsg_str="EPSG:4326",
+    dst_epsg_str="EPSG:4326",
+    res=0.1,
+    trans_bug_correction=False,
+    out_dtype=gdal.GDT_Float32,
+):
+    # 注意：このメソッドはラスタライズの際にGCP画像上に投影するわけではない。（GDALでは簡単なコードでそれを実装できない。）
+    # GCP画像の範囲を読み込み、指定した分解能と座標系でラスタライズする。
     prop = geo_info.get_property_from_raster_with_gcps(raster_ds)
 
+    poly_layer = poly_ds.GetLayer()
+
     num_band = 1
-    pixel_x = prop[0]
-    pixel_y = prop[1]
-    gcpsrc = prop[2]
     gcps = prop[3]
 
-    for gcp in gcps:
-        lon = gcp.GCPX
-        if lon < 0:
-            gcp.GCPX = lon + 360.0
+    src_epsg = int(src_epsg_str[5:])
+    dst_epsg = int(dst_epsg_str[5:])
+    target_ref = osr.SpatialReference()
+    target_ref.ImportFromEPSG(dst_epsg)
+    geoproj_wkt = target_ref.ExportToWkt()
+    trans = geo_info.get_coord_transform_epsg(src_epsg, dst_epsg)
 
-    driver = gdal.GetDriverByName(file_type)
-    ds = driver.Create(outfile, pixel_x, pixel_y, num_band, out_dtype)
-    band = ds.GetRasterBand(1)
+    gcps_pixel = []
+    gcps_line = []
+    for gcp in gcps:
+        if not trans_bug_correction:
+            x, y = trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2]
+        else:
+            x, y = trans.TransformPoint(gcp.GCPY, gcp.GCPX)[0:2]
+        gcps_pixel.append(x)
+        gcps_line.append(y)
+    #        print(x,y)
+
+    array1 = np.array(gcps_pixel)
+    array2 = np.array(gcps_line)
+    pmin = np.min(array1)
+    pmax = np.max(array1)
+    lmin = np.min(array2)
+    lmax = np.max(array2)
+
+    pixel_x = int((pmax - pmin) / res)
+    pixel_y = int((lmax - lmin) / res)
+
+    geotrans = (pmin - res, res, 0.0, lmax + res, 0.0, -res)
+
+    driver = gdal.GetDriverByName("GTiff")
+    tmp_ds = driver.Create(outfile, pixel_x, pixel_y, num_band, out_dtype)
+    tmp_ds.SetGeoTransform(geotrans)
+    tmp_ds.SetProjection(geoproj_wkt)
+
+    band = tmp_ds.GetRasterBand(1)
     band.SetNoDataValue(0)
     band.FlushCache()
 
-    #    ds.SetProjection(geoproj)
-    ds.SetGCPs(gcps, gcpsrc)
+    gdal.RasterizeLayer(tmp_ds, [1], poly_layer, options=["ATTRIBUTE=id", "ALL_TOUCHED=TRUE"])  # , burn_values=[1]
+    tmp_ds.FlushCache()
 
-    gdal.RasterizeLayer(ds, [1], source_layer, options=["ATTRIBUTE=id", "ALL_TOUCHED=TRUE"])  # , burn_values=[1]
-    #    gdal.RasterizeLayer(ds, [1], source_layer,burn_values=[1])
-    ds.FlushCache()
+
+def rasterize_by_raster_with_proj(raster_ds, poly_ds, outfile="/vsimem/output.tif"):
+    driver = gdal.GetDriverByName("GTiff")
+    dst_ds = driver.CreateCopy(outfile, raster_ds)
+    poly_layer = poly_ds.GetLayer()
+    gdal.RasterizeLayer(dst_ds, [1], poly_layer, options=["ATTRIBUTE=id", "ALL_TOUCHED=TRUE"])  # , burn_values=[1]
+    return dst_ds
 
 
 def reproject_shp(source_shp, target_shp, t_srs):

@@ -57,6 +57,16 @@ class AMSR2_L1R:
         self.output = eaz
         return eaz
 
+    def get_earth_incidence(self):
+        eaz = self.get_subds(self.subdsID["Earth_Incidence"]).ReadAsArray()[self.clip_array] * 0.01
+        self.output = eaz
+        return eaz
+
+    def get_sun_elevation(self):
+        eaz = self.get_subds(self.subdsID["Sun_Elevation"]).ReadAsArray()[self.clip_array] * 0.01
+        self.output = eaz
+        return eaz
+
     def get_land_ocean_flag(self, resolution="36GHz"):
         num = {"6GHz": 0, "10GHz": 1, "18GHz": 2, "36GHz": 3}
         loflag = self.get_subds(self.subdsID["Land_Ocean_Flag_6_to_36"]).ReadAsArray()[num[resolution]][self.clip_array]

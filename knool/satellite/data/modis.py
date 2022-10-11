@@ -137,7 +137,7 @@ class MXD021KM:
         self.output_prop = geo_info.get_property_from_raster_with_gcps(self.ds_ref)
         return ref
 
-    def calc_IST(self, config_path=os.path.dirname(__file__) + os.sep + "conf/modis_ist.yaml"):
+    def calc_IST(self, config_path=os.path.dirname(__file__) + os.sep + "../algorithm/conf/modis_ist.yaml"):
         cfg = import_config(config_path=config_path)
         north_lat = float(self.ds_em.GetMetadata()["NORTHBOUNDINGCOORDINATE"])
 

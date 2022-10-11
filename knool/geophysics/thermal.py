@@ -197,7 +197,6 @@ def convert_thermal_ice_thickness(q, ti, hs, tb):
     return hi
 # fmt: on
 
-
 # fmt: off
 def calc_thermal_ice_properties(slp, t2m, td2m, w10m, ic, cl, tw, lat, jday, hour, hs, ti,
     lw_func=calc_lwave_MC1973,
@@ -233,7 +232,7 @@ def calc_thermal_ice_properties(slp, t2m, td2m, w10m, ic, cl, tw, lat, jday, hou
 
     tb = 273.15 - 1.86
     ice_th = convert_thermal_ice_thickness(hb_all, ti, hs, tb)
-
+    
     if test:
         hbi_list = [sw_ice, ilw_ice, olw_ice, sh_ice, lh_ice]
         hbw_list = [sw_water, ilw_water, olw_water, sh_water, lh_water]

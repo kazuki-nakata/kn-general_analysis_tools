@@ -5,6 +5,33 @@ import os
 OGRTypes = {int: ogr.OFTInteger, str: ogr.OFTString, float: ogr.OFTReal}
 
 
+def copy_dataset(ds, outfile="/vsimem/output.tif"):
+    driver = gdal.GetDriverByName("GTiff")
+    dst_ds = driver.CreateCopy(outfile, ds)
+
+    data = ds.ReadAsArray()
+
+    if len(data.shape) == 2:
+        num_band = 1
+    else:
+        num_band = data.shape[0]
+
+    if num_band == 1:
+        src_band = ds.GetRasterBand(1)
+        band = dst_ds.GetRasterBand(1)
+        band.WriteArray(data)
+        band.SetNoDataValue(src_band.GetNoDataValue())
+        band.FlushCache()
+    else:
+        for i in range(0, num_band):
+            src_band = ds.GetRasterBand(i + 1)
+            band = dst_ds.GetRasterBand(i + 1)
+            band.WriteArray(data[i, :, :])
+            band.SetNoDataValue(src_band.GetNoDataValue())
+            band.FlushCache()
+    return dst_ds
+
+
 # fmt: off
 def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no_data, file_type, geomode="proj",
                            geotrans=None, geoproj=None, gcps=None, gcpsrc=None):
@@ -39,7 +66,7 @@ def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no
     return ds
 
 
-def make_raster_from_array_and_prop(data, filepath, dtype, no_data, prop, file_type):
+def make_raster_from_array_and_prop(data, filepath, prop, dtype=gdal.GDT_Float32, no_data=9.9E33, file_type="GTiff"):
 
     if len(data.shape) == 2:
         num_band = 1
@@ -66,7 +93,7 @@ def make_raster_from_array_and_prop(data, filepath, dtype, no_data, prop, file_t
     )
 
 
-def make_raster_with_gcps_from_array(data, filepath, dtype, no_data, prop, file_type):
+def make_raster_with_gcps_from_array(data, filepath, dtype, no_data, prop, file_type="GTiff"):
 
     if len(data.shape) == 2:
         num_band = 1
@@ -107,12 +134,18 @@ def make_north_nsidc_geoinfo(res):
     return geotrans, geoproj
 
 
-def open_generic_binary(infile, in_dtype, out_dtype, band, length, width, byte_order):
+def open_generic_binary(infile, band, length, width, in_dtype=np.float32, byte_order="little"):
     with open(infile, mode="rb") as f:
-        data = np.fromfile(f, dtype=in_dtype, sep="").astype(out_dtype).reshape(band, length, width)
+        data = np.fromfile(f, dtype=in_dtype, sep="").reshape(band, length, width)
     if byte_order == "big":
         data = data.byteswap()
     return data
+
+
+def make_generic_binary(data, infile, in_dtype=np.float32, byte_order="little"):
+    if byte_order == "big":
+        data = data.byteswap()
+    data.astype(in_dtype).tofile(infile)
 
 
 def open_hdf(infile, in_dtype, out_dtype, band, length, width):
