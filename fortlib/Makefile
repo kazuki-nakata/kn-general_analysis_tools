@@ -13,8 +13,8 @@ MODS = $(SRCDIR)*.mod
 TARGET = fortlib
 LIB  = lib$(TARGET).a
 
-MAIN = filter.F90
-SUB = #filter.o
+MAIN = filter.F90 pmw_processor.F90
+SUB = sort.o #pmw_processor.o #filter.o
 
 MAINOBJS = $(addprefix $(SRCDIR), $(MAIN))
 MODOBJS = $(addprefix $(SRCDIR), $(SUB))
@@ -42,7 +42,7 @@ $(TARGET):$(MODOBJS) $(MAINOBJS)
 	$(PC) -c $(PFFLAGS) $(LDFLAGS) $(OPT) -m $@ $(MAINOBJS) $(MODOBJS)
 
 $(LIB):$(MODOBJS)
-	$(AR) $(SRCDIR)$(LIB) $^
+	$(AR) crvf $(SRCDIR)$(LIB) $^
 	$(RANLIB) $(SRCDIR)$(LIB)
 
 $(BINDIR):

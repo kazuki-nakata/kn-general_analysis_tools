@@ -64,8 +64,8 @@ def get_latlons_from_raster(raster, interval=1):
     gt = raster.GetGeoTransform()
     # minx = gt[0] + width * gt[1] + height * gt[2]
     # miny = gt[3] + width * gt[4] + height * gt[5]
-    xorder_vector = np.arange(0, width, interval)
-    yorder_vector = np.arange(0, height, interval)
+    xorder_vector = np.arange(0, width, interval) + 0.5
+    yorder_vector = np.arange(0, height, interval) + 0.5
 
     loc_x = np.array([gt[0] + xorder_vector * gt[1] + yorder * gt[2] for yorder in yorder_vector])
     loc_y = np.array([gt[3] + xorder_vector * gt[4] + yorder * gt[5] for yorder in yorder_vector])
@@ -176,26 +176,27 @@ def calc_distances(lons1, lats1, lons2, lats2):  # unit:km
     return distance
 
 
-def convert_lla_to_ecef(lat0, lon0, alt, a=6378137.0, b=6356752.314245):
+def calc_prime_vertical_radius(gdlat0, h=0, a=6378137.0, b=6356752.314245):
+    gdlat = np.float64(np.radians(gdlat0))
+    return a**2 / np.sqrt((a * np.cos(gdlat)) ** 2 + (b * np.sin(gdlat)) ** 2)
+
+
+def transform_lla_to_ecef(lat0, lon0, alt, a=6378137.0, b=6356752.314245):
     f = (a - b) / a
 
-    lon = np.radians(lon0)
-    lat = np.radians(lat0)
-
-    rad = np.float64(a)  # Radius of the Earth (in meters)
+    n = calc_prime_vertical_radius(lat0, a=a, b=b)
+    lon = np.float64(np.radians(lon0))
+    lat = np.float64(np.radians(lat0))
 
     cosLat = np.cos(lat)
     sinLat = np.sin(lat)
-    FF = (1.0 - f) ** 2
-    C = 1 / np.sqrt(cosLat**2 + FF * sinLat**2)
-    S = C * FF
-    x = (rad * C + alt) * cosLat * np.cos(lon)
-    y = (rad * C + alt) * cosLat * np.sin(lon)
-    z = (rad * S + alt) * sinLat
+    x = (n + alt) * cosLat * np.cos(lon)
+    y = (n + alt) * cosLat * np.sin(lon)
+    z = ((1 - f) ** 2 * n + alt) * sinLat
     return x, y, z
 
 
-def convert_ecef_to_lla(x, y, z, a=6378137.0, b=6356752.314245):
+def transform_ecef_to_lla(x, y, z, a=6378137.0, b=6356752.314245):
     f = (a - b) / a
 
     e_sq = f * (2 - f)
@@ -221,158 +222,123 @@ def convert_ecef_to_lla(x, y, z, a=6378137.0, b=6356752.314245):
     return lat, lon, h
 
 
-def convert_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
-
-    if type(lat0).__module__ != "numpy":
+def transform_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
+    if type(x).__module__ != "numpy":
         proc = 2
     elif len(lat0.shape) == 0:
         proc = 2
     else:
         proc = 1
 
-    if proc == 1:
-        # px = np.radians([90 for i in range(x0.shape[0])])
-        py = np.radians(90 - lat0)
-        pz = np.radians(lon0)
-        pz2 = np.radians([90 for i in range(x0.shape[0])])
-        p1 = np.array([x, y, z])
-        p0 = np.array([x0, y0, z0])
-        dp = p1 - p0
+    lat = np.float64(np.radians(lat0))
+    lon = np.float64(np.radians(lon0))
 
-        Ry = np.array(
-            [
-                [np.cos(py), np.zeros(x0.shape), -np.sin(py)],
-                [np.zeros(x0.shape), np.ones(x0.shape), np.zeros(x0.shape)],
-                [np.sin(py), np.zeros(x0.shape), np.cos(py)],
-            ]
-        ).transpose([2, 0, 1])
+    xyz0 = np.array([x0, y0, z0])
+    xyz = np.array([x, y, z])
 
-        Rz = np.array(
-            [
-                [np.cos(pz), np.sin(pz), np.zeros(x0.shape)],
-                [-np.sin(pz), np.cos(pz), np.zeros(x0.shape)],
-                [np.zeros(x0.shape), np.zeros(x0.shape), np.ones(x0.shape)],
-            ]
-        ).transpose([2, 0, 1])
-
-        Rz2 = np.array(
-            [
-                [np.cos(pz2), np.sin(pz2), np.zeros(x0.shape)],
-                [-np.sin(pz2), np.cos(pz2), np.zeros(x0.shape)],
-                [np.zeros(x0.shape), np.zeros(x0.shape), np.ones(x0.shape)],
-            ]
-        ).transpose([2, 0, 1])
-
-        R = np.matmul(np.matmul(Rz2, Ry), Rz)
-        # result = R.dot(dp)
-        x, y, z = np.einsum("kij,jk->ik", R, dp)
-        # x = np.diag(result[:, 0, :])
-        # y = np.diag(result[:, 1, :])
-        # z = np.diag(result[:, 2, :])
-
+    if len(xyz0.shape) == 1:
+        dxyz = (xyz.T - xyz0).T
     else:
-        # px = np.radians(90)
-        py = np.radians(90 - lat0)
-        pz = np.radians(lon0)
-        pz2 = np.radians(90)
-        p1 = np.array([x, y, z])
-        p0 = np.array([x0, y0, z0])
+        dxyz = xyz - xyz0
 
-        Ry = np.array([[np.cos(py), 0, -np.sin(py)], [0, 1, 0], [np.sin(py), 0, np.cos(py)]])
+    slon = np.sin(lon)
+    clon = np.cos(lon)
+    slat = np.sin(lat)
+    clat = np.cos(lat)
+    zero_arr = np.zeros(x0.shape)
+    R = np.array(
+        [[-slon, clon, zero_arr], [-slat * clon, -slat * slon, clat], [clat * clon, clat * slon, slat]]
+    )  # .transpose([0, 1, 2])
+    # print(R.shape)
+    if proc == 1:
+        sx, sy, sz = np.einsum("jik,ik->jk", R, dxyz)
+    else:
+        sx, sy, sz = R.dot(dxyz)
+    return sx, sy, sz
 
-        Rz = np.array([[np.cos(pz), np.sin(pz), 0], [-np.sin(pz), np.cos(pz), 0], [0, 0, 1]])
 
-        Rz2 = np.array([[np.cos(pz2), np.sin(pz2), 0], [-np.sin(pz2), np.cos(pz2), 0], [0, 0, 1]])
+def transform_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, sx, sy, sz):
 
-        R = Rz2.dot(Ry).dot(Rz)
-        x, y, z = R.dot(p1 - p0)
-
-    return x, y, z
-
-
-def convert_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, x, y, z):
-
-    if type(lat0).__module__ != "numpy":
+    if type(sx).__module__ != "numpy":
         proc = 2
-    elif len(lat0.shape) == 0:
+    elif len(sx.shape) == 0:
         proc = 2
     else:
         proc = 1
 
+    lat = np.float64(np.radians(lat0))
+    lon = np.float64(np.radians(lon0))
+    xyz0 = np.array([x0, y0, z0])
+    xyz = np.array([sx, sy, sz])
+    slon = np.sin(lon)
+    clon = np.cos(lon)
+    slat = np.sin(lat)
+    clat = np.cos(lat)
+    zero_arr = np.zeros(x0.shape)
+    R = np.array(
+        [[-slon, -slat * clon, clat * clon], [clon, -slat * slon, clat * slon], [zero_arr, clat, slat]]
+    )  # .transpose([0, 1, 2])
+
     if proc == 1:
-
-        # px = np.radians([90 for i in range(x0.shape[0])])
-        py = np.radians(90 - lat0)
-        pz = np.radians(lon0)
-        pz2 = np.radians([90 for i in range(x0.shape[0])])
-        p2 = np.array([x, y, z])
-        p0 = np.array([x0, y0, z0])
-
-        Ry = np.array(
-            [
-                [np.cos(py), np.zeros(x0.shape), -np.sin(py)],
-                [np.zeros(x0.shape), np.ones(x0.shape), np.zeros(x0.shape)],
-                [np.sin(py), np.zeros(x0.shape), np.cos(py)],
-            ]
-        ).transpose([2, 0, 1])
-
-        Rz = np.array(
-            [
-                [np.cos(pz), np.sin(pz), np.zeros(x0.shape)],
-                [-np.sin(pz), np.cos(pz), np.zeros(x0.shape)],
-                [np.zeros(x0.shape), np.zeros(x0.shape), np.ones(x0.shape)],
-            ]
-        ).transpose([2, 0, 1])
-
-        Rz2 = np.array(
-            [
-                [np.cos(pz2), np.sin(pz2), np.zeros(x0.shape)],
-                [-np.sin(pz2), np.cos(pz2), np.zeros(x0.shape)],
-                [np.zeros(x0.shape), np.zeros(x0.shape), np.ones(x0.shape)],
-            ]
-        ).transpose([2, 0, 1])
-
-        R = np.linalg.inv(np.matmul(np.matmul(Rz2, Ry), Rz))
-        result = R.dot(p2)
-        x = np.diag(result[:, 0, :]) + p0[0]
-        y = np.diag(result[:, 1, :]) + p0[1]
-        z = np.diag(result[:, 2, :]) + p0[2]
+        sx, sy, sz = np.einsum("jik,ik->jk", R, xyz) + xyz0
     else:
-        # px = np.radians(90)
-        py = np.radians(90 - lat0)
-        pz = np.radians(lon0)
-        pz2 = np.radians(90)
-        p2 = np.array([x, y, z])
-        p0 = np.array([x0, y0, z0])
+        sx, sy, sz = R.dot(xyz) + xyz0
 
-        Ry = np.array([[np.cos(py), 0, -np.sin(py)], [0, 1, 0], [np.sin(py), 0, np.cos(py)]])
-
-        Rz = np.array([[np.cos(pz), np.sin(pz), 0], [-np.sin(pz), np.cos(pz), 0], [0, 0, 1]])
-
-        Rz2 = np.array([[np.cos(pz2), np.sin(pz2), 0], [-np.sin(pz2), np.cos(pz2), 0], [0, 0, 1]])
-
-        R = np.linalg.inv(Rz2.dot(Ry).dot(Rz))
-        x, y, z = R.dot(p2) + p0
-
-    return x, y, z
+    return sx, sy, sz
 
 
-def convert_lla_to_rotated_enu(lat0, lon0, eaz, lat, lon):  # eaz: Earth Azimuth
-    R = 6373000.0
-    x0, y0, z0 = geo_info.convert_lla_to_ecef(lat0, lon0, 0, a=R, b=R)
-    x, y, z = geo_info.convert_lla_to_ecef(lat, lon, 0, a=R, b=R)
-    p, q, r = geo_info.convert_ecef_to_enu(x0, y0, z0, lat0, lon0, 0, x, y, z)
+def transform_lla_to_rotated_enu(lat0, lon0, eaz, lat, lon):  # eaz: Earth Azimuth
+    # R = 6373000.0
+    x0, y0, z0 = transform_lla_to_ecef(lat0, lon0, 0)  # , a=R, b=R)
+    x, y, z = transform_lla_to_ecef(lat, lon, 0)  # , a=R, b=R)
+    p, q, r = transform_ecef_to_enu(x0, y0, z0, lat0, lon0, 0, x, y, z)
     rad = np.radians(eaz)
     q2 = np.cos(rad) * q + np.sin(rad) * p
     p2 = np.cos(rad) * p - np.sin(rad) * q
     return p2, q2, r
 
 
+def geodetic_to_geocentric_latitude(gdlat0, h=0, a=6378137.0, b=6356752.314245):
+    gdlat = np.radians(gdlat0)
+    f = (a - b) / a
+    e2 = 2 * f - f**2
+    n = calc_prime_vertical_radius(gdlat)
+    gclat = np.arctan((n * (1 - f) ** 2 + h) / (n + h) * np.tan(gdlat))
+    gclat = np.degrees(gclat)
+    return gclat
+
+
+def calc_slant_range1(gdlat, theta_inc, theta_look, h):
+    # gdlat: geodetic latitude of observed point on earth surface
+    # theta_inc: incidence angle
+    # h: s/c height
+    # theta_look: sensor look angle (obtained from offnadir angle and attitude data)
+    ea = theta_inc - theta_look
+    re = h * np.sin(theta_look) / (np.sin(np.pi - theta_inc) - np.sin(theta_look))
+    # re=calc_prime_vertical_radius(gdlat,a=a,b=b)
+    # srange = re * (np.sqrt(((h + re) / re) ** 2 - np.cos(np.pi / 2 - theta_inc) ** 2) - np.sin(np.pi / 2 - theta_inc))
+    srange = re * np.sin(ea) / np.sin(theta_look)
+    return srange
+
+
+def calc_slant_range2(gdlat, theta_inc, theta_look, h):
+    # gdlat: geodetic latitude of observed point on earth surface
+    # theta_inc: incidence angle
+    # h: s/c height
+    # theta_look: sensor look angle (obtained from offnadir angle and attitude data)
+    ea = theta_inc - theta_look
+    re = h * np.sin(theta_look) / (np.sin(np.pi - theta_inc) - np.sin(theta_look))
+    # re=calc_prime_vertical_radius(gdlat,a=a,b=b)
+    # srange = re * (np.sqrt(((h + re) / re) ** 2 - np.cos(np.pi / 2 - theta_inc) ** 2) - np.sin(np.pi / 2 - theta_inc))
+    srange = re * np.sin(ea) / np.sin(theta_look)
+    return srange
+
+
 def calc_line_buffer_point(lat0, lon0, h0, lat, lon, h, distance, ori="right"):
     R = 6373000.0
-    x0, y0, z0 = convert_lla_to_ecef(lat0, lon0, h0, a=R, b=R)
-    x, y, z = convert_lla_to_ecef(lat, lon, h, a=R, b=R)
-    p, q, r = convert_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z)
+    x0, y0, z0 = transform_lla_to_ecef(lat0, lon0, h0, a=R, b=R)
+    x, y, z = transform_lla_to_ecef(lat, lon, h, a=R, b=R)
+    p, q, r = transform_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z)
     sign = 1
     if ori == "left":
         sign = -1
@@ -389,8 +355,8 @@ def calc_line_buffer_point(lat0, lon0, h0, lat, lon, h, distance, ori="right"):
     else:
         r2 = np.zeros(p2.shape)
 
-    buff_ecef = convert_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, p2, q2, r2)
-    lat, lon, h = convert_ecef_to_lla(*buff_ecef, a=R, b=R)
+    buff_ecef = transform_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, p2, q2, r2)
+    lat, lon, h = transform_ecef_to_lla(*buff_ecef, a=R, b=R)
 
     return lat, lon, h
 

@@ -1,6 +1,9 @@
-import sys
+import sys, os
 import numpy as np
 from osgeo import osr
+import pandas as pd
+from osgeo import gdal, ogr
+from . import geo_transform, geo_io
 
 
 class Projection:
@@ -80,3 +83,151 @@ class Projection:
         index_array2 = index_array2[:, bool_array]
 
         return out_ij, index_array2
+
+
+class Grid:
+    def __init__(self, source_ref, target_ref, lt_x, lt_y, rb_x, rb_y, res, colname=["data"]):
+        # source_ref and target_ref: ref=osr.SpatialReference() -> ref.ImportFromEPSG(epsg)
+        # rt_x,rt_y,lb_x,lb_y: corner position in right top and left bottom cells.
+        self.target_ref = target_ref
+        self.res = res
+        self.coord_transform = osr.CoordinateTransformation(source_ref, target_ref)
+        self.nx = int((rb_x - lt_x) / res)
+        self.ny = int((lt_y - rb_y) / res)
+        self.rb_x = rb_x
+        self.rb_y = rb_y
+        self.lt_x = lt_x
+        self.lt_y = lt_y
+        self.colname_list = ["lat", "lon", "grid_x", "grid_y"]
+        self.colname_list.extend(colname)
+        self.df = pd.DataFrame(index=[], columns=self.colname_list)
+
+    def get_geotrans(self):
+        geotrans = (self.lt_x, self.res, 0.0, self.lt_y, 0.0, -self.res)
+        return geotrans
+
+    def make_empty_raster_ds(self, nodata=0, num_band=1, out_dtype=gdal.GDT_Float32, outfile="/vsimem/output.tif"):
+        geotrans = self.get_geotrans()
+        pixel_x = self.nx
+        pixel_y = self.ny
+        geoproj = self.target_ref.ExportToWkt()
+        driver = gdal.GetDriverByName("GTiff")
+        tmp_ds = driver.Create(outfile, pixel_x, pixel_y, num_band, out_dtype)
+        tmp_ds.SetGeoTransform(geotrans)
+        tmp_ds.SetProjection(geoproj)
+        band = tmp_ds.GetRasterBand(1)
+        band.SetNoDataValue(0)
+        band.FlushCache()
+        return tmp_ds
+
+    def get_land_data(self, nodata=0, outfile="/vsimem/output.tif", all_touched=False, shpfile=None):
+        if shpfile is None:
+            shpfile = os.path.join(os.path.dirname(__file__), "data", "GSHHS_i_L1L5_dissolve.shp")
+        print(shpfile)
+        tmp_ds = self.make_empty_raster_ds(nodata=nodata, outfile=outfile)
+        s_ds = ogr.Open(shpfile, 0)
+        poly_ds = geo_transform.reproject_vector(s_ds, self.target_ref, outfile="/vsimem/output.shp")
+        poly_layer = poly_ds.GetLayer()
+        if all_touched:
+            gdal.RasterizeLayer(tmp_ds, [1], poly_layer, options=["ATTRIBUTE=level", "ALL_TOUCHED=TRUE"])
+        else:
+            gdal.RasterizeLayer(tmp_ds, [1], poly_layer, options=["ATTRIBUTE=level"])
+
+        del poly_ds
+        del s_ds
+        return tmp_ds
+
+    def _2Dcoord_to_1Dcoord_and_1Dindex(self, iarray, jarray):
+        # for latlon, iarray:lat,jarray:lon
+        coord = np.array([iarray.reshape(-1), jarray.reshape(-1)]).T
+        length = iarray.shape[0]
+        width = jarray.shape[1]
+        index_i, index_j = np.meshgrid(np.arange(0, length), np.arange(0, width))
+        index = np.array([index_i.T.reshape(-1), index_j.T.reshape(-1)]).T
+
+        return coord, index
+
+    # reference: https://soback.jp/detail/26737
+    def _list_to_numpy(self, LoL, default=np.nan):
+        cols = len(max(LoL, key=len))
+        rows = len(LoL)
+        AoA = np.empty(
+            (
+                rows,
+                cols,
+            )
+        )
+        AoA.fill(default)
+        for idx in range(rows):
+            AoA[idx, 0 : len(LoL[idx])] = LoL[idx]
+        return AoA
+
+    def stack(self, iarray, jarray, varray_list):
+        # coord_array : For latlon, array(n,2). (n,0)->lat (n,1)->lon
+        # output coord_array: array(n,2). (n,0) -> x axis (horizontal)
+        coord_array, index_array = self._2Dcoord_to_1Dcoord_and_1Dindex(iarray, jarray)
+        trans_array = np.array(self.coord_transform.TransformPoints(coord_array))[:, 0:2]
+        #        trans_array = np.empty(trans_array0.shape)
+        trans_array2 = trans_array[
+            (trans_array[:, 0] > self.lt_x)
+            & (trans_array[:, 0] < self.rb_x)
+            & (trans_array[:, 1] > self.rb_y)
+            & (trans_array[:, 1] < self.lt_y)
+        ].T
+        index_array2 = index_array[
+            (trans_array[:, 0] > self.lt_x)
+            & (trans_array[:, 0] < self.rb_x)
+            & (trans_array[:, 1] > self.rb_y)
+            & (trans_array[:, 1] < self.lt_y)
+        ].T
+
+        coord_array2 = coord_array[
+            (trans_array[:, 0] > self.lt_x)
+            & (trans_array[:, 0] < self.rb_x)
+            & (trans_array[:, 1] > self.rb_y)
+            & (trans_array[:, 1] < self.lt_y)
+        ].T
+
+        # trans_array3 = np.empty(trans_array2.shape)
+        trans_array2[0, :] = (trans_array2[0, :] - self.lt_x) / self.res
+        trans_array2[1, :] = (trans_array2[1, :] - self.rb_y) / self.res
+
+        # trans_array3 = np.rint(trans_array2)
+        varray_list2 = [coord_array2, trans_array2]
+        for varray in varray_list:
+            varray = varray[tuple(map(tuple, index_array2))]
+            varray = varray.reshape(1, varray.shape[0])
+            varray_list2.append(varray)
+
+        test = np.concatenate(varray_list2, axis=0).T
+
+        df = pd.DataFrame(data=test, columns=self.colname_list)  # gi,gj:grid coord, si,sj: data coord
+        self.df = pd.concat([self.df, df])
+        # test
+
+    #         map_field_i = np.full((self.nx,self.ny),0)
+    #         map_field_i[trans_array3.tolist()]=index_array2[0]
+
+    def flush(self):
+        self.df = pd.DataFrame(index=[], columns=self.colname_list)
+
+    def export_numpy(self):
+        groups = self.df.groupby(["grid_i", "grid_j"])
+        result = []
+        for colname in self.colname_list[2:]:
+            groups = self.df.groupby(["grid_i", "grid_j"])
+            glist = groups["grid_x"].apply(list)
+            result.append(self._list_to_numpy(glist.values))
+        glist = glist.reset_index()
+        grid_i = np.array(glist["grid_i"].values)
+        grid_j = np.array(glist["grid_j"].values)
+        return grid_i, grid_j, np.array(result)
+
+    def export_output(self, filepath, no_data=9.9e33, file_type="GTiff", dtype=gdal.GDT_Float32):
+        geotrans = self.get_geotrans()
+        pixel_x = self.nx
+        pixel_y = self.ny
+        geoproj = self.target_ref.ExportToWkt()
+        output_prop = [pixel_x, pixel_y, geotrans, geoproj]
+        geo_io.make_raster_from_array_and_prop(self.output, filepath, output_prop, dtype, no_data, file_type)
+        print("Exported")

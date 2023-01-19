@@ -205,7 +205,7 @@ def rasterize_by_raster_with_gcps(
     pixel_x = int((pmax - pmin) / res)
     pixel_y = int((lmax - lmin) / res)
 
-    geotrans = (pmin - res, res, 0.0, lmax + res, 0.0, -res)
+    geotrans = (pmin - res / 2, res, 0.0, lmax + res / 2, 0.0, -res)
 
     driver = gdal.GetDriverByName("GTiff")
     tmp_ds = driver.Create(outfile, pixel_x, pixel_y, num_band, out_dtype)
@@ -228,16 +228,16 @@ def rasterize_by_raster_with_proj(raster_ds, poly_ds, outfile="/vsimem/output.ti
     return dst_ds
 
 
-def reproject_shp(source_shp, target_shp, t_srs):
-    s_ds = ogr.Open(source_shp, 0)
+def reproject_vector(s_ds, t_srs, outfile="/vsimem/output.shp"):
+    # s_ds = ogr.Open(source_shp, 0)
     s_lyr = s_ds.GetLayer(0)
     s_srs = s_lyr.GetSpatialRef()
 
     coord_trans = osr.CoordinateTransformation(s_srs, t_srs)
 
     t_driver = ogr.GetDriverByName("ESRI Shapefile")
-    t_ds = t_driver.CreateDataSource(target_shp)
-    t_lyr_name = os.path.splitext(os.path.split(target_shp)[1])[0]
+    t_ds = t_driver.CreateDataSource(outfile)
+    t_lyr_name = os.path.splitext(os.path.split(outfile)[1])[0]
     t_lyr = t_ds.CreateLayer(t_lyr_name, geom_type=ogr.wkbMultiPolygon)
 
     s_lyr_defn = s_lyr.GetLayerDefn()
@@ -261,11 +261,12 @@ def reproject_shp(source_shp, target_shp, t_srs):
         t_feature.Destroy()
         feature.Destroy()
 
-    t_srs.MorphToESRI()
-    f_name = os.path.splitext(target_shp)[0]
-    file = open(f_name + ".prj", "w")
-    file.write(t_srs.ExportToWkt())
-    file.close()
+    # t_srs.MorphToESRI()
+    # f_name = os.path.splitext(outfile)[0]
+    # file = open(f_name + ".prj", "w")
+    # file.write(t_srs.ExportToWkt())
+    # file.close()
 
     s_ds.Destroy()
-    t_ds.Destroy()
+    # t_ds.Destroy()
+    return t_ds

@@ -2,4 +2,19 @@ satellite: "GCOM-W1 (SHIZUKU)"
 obs_direction: "middle"
 obs_width: 1450000
 obs_offset: 0
-
+beam_width:
+  6G: 1.8
+  7G: 1.8
+  10G: 1.2
+  18G: 0.65
+  23G: 0.75
+  36G: 0.35
+  89G: 0.15
+integration_time:
+  6G: 2.6
+  7G: 2.6
+  10G: 2.6
+  18G: 2.6
+  23G: 2.6
+  36G: 2.6
+  89G: 1.3

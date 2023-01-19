@@ -6,7 +6,7 @@ PFFLAGS = --fcompiler=gnu95 --f90flags="-static-libgfortran"
 RM = rm -f
 CP = cp -f
 MV = mv -f
-AR = ar crvf
+AR = ar
 RANLIB = touch
 DELIMITER= /
 #RANLIB = ranlib
