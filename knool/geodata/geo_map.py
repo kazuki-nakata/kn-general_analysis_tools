@@ -6,7 +6,10 @@ from osgeo import gdal, ogr
 from . import geo_transform, geo_io
 
 
-class Projection:
+class Search:
+    #本クラスは画素値は入力として与えない。最初に画像Aの各ピクセルの座標値を入力する。
+    #指定したSRS・解像度のグリッドセルに対応する画像Aのピクセルインデックスが割り当てられる。
+    #search_indexに座標値を入力すると、画像Aのピクセルインデックスを高速で取得することができる。
     def __init__(self, source_ref, target_ref, iarray, jarray, res):
         # source_ref and target_ref: ref=osr.SpatialReference() -> ref.ImportFromEPSG(epsg)
         self.target_ref = target_ref
@@ -49,8 +52,10 @@ class Projection:
         # should change array(n,2) to array(2,n)
         trans_array_t = self.trans_array.T
 
-        self.map_field_i[trans_array_t.tolist()] = index_array[0]
-        self.map_field_j[trans_array_t.tolist()] = index_array[1]
+        # self.map_field_i[trans_array_t.tolist()] = index_array[0]
+        # self.map_field_j[trans_array_t.tolist()] = index_array[1]
+        self.map_field_i[tuple(map(tuple, trans_array_t))] = index_array[0]
+        self.map_field_j[tuple(map(tuple, trans_array_t))] = index_array[1]
 
     def search_index(self, source_ref, iarray, jarray):
         # coord_array : For latlon, array(n,2). (n,0)->lat (n,1)->lon
@@ -77,7 +82,8 @@ class Projection:
             & (trans_array[:, 1] > 0)
             & (trans_array[:, 1] < self.ny)
         ].T
-        out_ij = np.array([self.map_field_i[trans_array2.tolist()], self.map_field_j[trans_array2.tolist()]])
+#        out_ij = np.array([self.map_field_i[trans_array2.tolist()], self.map_field_j[trans_array2.tolist()]])
+        out_ij = np.array([self.map_field_i[tuple(map(tuple, trans_array2))], self.map_field_j[tuple(map(tuple, trans_array2))]])
         bool_array = out_ij[0, :] != -1
         out_ij = out_ij[:, bool_array]
         index_array2 = index_array2[:, bool_array]
@@ -86,6 +92,8 @@ class Projection:
 
 
 class Grid:
+    #ある投影座標系・グリッド設定にデータを落とし込む。
+    #スタックされたデータはpandasのdfとして格納される。
     def __init__(self, source_ref, target_ref, lt_x, lt_y, rb_x, rb_y, res, colname=["data"]):
         # source_ref and target_ref: ref=osr.SpatialReference() -> ref.ImportFromEPSG(epsg)
         # rt_x,rt_y,lb_x,lb_y: corner position in right top and left bottom cells.
@@ -111,13 +119,14 @@ class Grid:
         pixel_x = self.nx
         pixel_y = self.ny
         geoproj = self.target_ref.ExportToWkt()
-        driver = gdal.GetDriverByName("GTiff")
-        tmp_ds = driver.Create(outfile, pixel_x, pixel_y, num_band, out_dtype)
-        tmp_ds.SetGeoTransform(geotrans)
-        tmp_ds.SetProjection(geoproj)
-        band = tmp_ds.GetRasterBand(1)
-        band.SetNoDataValue(0)
-        band.FlushCache()
+
+        prop = []
+        prop.append(pixel_x)
+        prop.append(pixel_y)
+        prop.append(geotrans)
+        prop.append(geoproj)
+
+        tmp_ds = geo_io.make_empty_raster(prop, nodata=nodata, num_band=num_band, out_dtype=out_dtype, outfile=outfile)
         return tmp_ds
 
     def get_land_data(self, nodata=0, outfile="/vsimem/output.tif", all_touched=False, shpfile=None):

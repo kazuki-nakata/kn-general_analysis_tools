@@ -56,6 +56,7 @@ class AMSR2_L1B:
         lat_1d_min = np.min(lat, axis=1)
         # lat_1d_max = np.max(lat, axis=1)
         # print(lat_1d_min, lat_1d_max)
+        print("original size=", lat.shape)
         self.clip_array = (lat_1d_min >= lamin) & (lat_1d_min <= lamax)
         if not overlap:
             overlap = 30
@@ -222,6 +223,12 @@ class AMSR2_L1R:
         self.output = eaz
         return eaz
 
+    def get_satellite_position(self):
+        sp0 = self.get_subds(self.subdsID["Navigation_Data"]).ReadAsArray()[self.clip_array, 0:3]
+        sp0 = np.append(sp0, np.array([(sp0[-1] - sp0[-2]) + sp0[-1]]), axis=0)
+        sp = np.array([(sp0[1:] - sp0[0:-1]) * i / 243 + sp0[0:-1] for i in range(243)]).transpose(2, 1, 0)
+        return sp
+        
     def get_earth_incidence(self):
         eaz = self.get_subds(self.subdsID["Earth_Incidence"]).ReadAsArray()[self.clip_array] * 0.01
         self.output = eaz

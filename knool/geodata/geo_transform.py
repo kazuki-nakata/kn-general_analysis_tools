@@ -31,12 +31,10 @@ def geocode(
     src_epsg_str="EPSG:4326",
     dst_epsg_str="EPSG:4326",
     resample_alg="near",
-    trans_bug_correction=False,
     NODATA_VALUE=None,
 ):
     # ds -> raster with GCPs
     # どの座標系のGCPでもOK。また、GCPに定義されている座標系の変換（再投影）にも対応できるようコーディング。
-    # うまく再投影できない場合は、xとyが逆の可能性あり（gdalのバグ）。その場合はtrans_bug_correctionをTrueにする。
     gcps = ds.GetGCPs()
     src_epsg = int(src_epsg_str[5:])
     dst_epsg = int(dst_epsg_str[5:])
@@ -46,10 +44,7 @@ def geocode(
 
     gcps2 = []
     for gcp in gcps:
-        if not trans_bug_correction:
-            x, y = trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2]
-        else:
-            x, y = trans.TransformPoint(gcp.GCPY, gcp.GCPX)[0:2]
+        x, y = trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2]
         gcp2 = gdal.GCP(x, y, 0, gcp.GCPPixel, gcp.GCPLine)
         gcps2.append(gcp2)
 
@@ -165,7 +160,6 @@ def rasterize_by_raster_with_gcps(
     src_epsg_str="EPSG:4326",
     dst_epsg_str="EPSG:4326",
     res=0.1,
-    trans_bug_correction=False,
     out_dtype=gdal.GDT_Float32,
 ):
     # 注意：このメソッドはラスタライズの際にGCP画像上に投影するわけではない。（GDALでは簡単なコードでそれを実装できない。）
@@ -187,10 +181,7 @@ def rasterize_by_raster_with_gcps(
     gcps_pixel = []
     gcps_line = []
     for gcp in gcps:
-        if not trans_bug_correction:
-            x, y = trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2]
-        else:
-            x, y = trans.TransformPoint(gcp.GCPY, gcp.GCPX)[0:2]
+        x, y = trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2]
         gcps_pixel.append(x)
         gcps_line.append(y)
     #        print(x,y)

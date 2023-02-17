@@ -614,4 +614,120 @@ function bilin(dx,dy,Undef,var1,var2,var3,var4)
   endif
 end function bilin
 
+
+SUBROUTINE motion_blur_filter(data_i,data_o,length,width,band,base,motion)
+  IMPLICIT NONE
+  INTEGER :: i,j,k,ii,jj
+  REAL(4):: dx,dy,theta,alpha
+  INTEGER(4) :: idx,idy,idx2,idy2,size
+  INTEGER(4),INTENT(IN) :: length,width,band
+  REAL(4), INTENT(OUT)  :: data_o(length,width,band)
+  REAL(4), INTENT(IN) :: data_i(length,width,band)  
+  REAL(4), ALLOCATABLE :: data(:,:,:)
+  REAL(4), INTENT(IN) :: base(2),motion(2)
+  INTEGER(4),ALLOCATABLE :: bk_x(:),bk_y(:)
+  INTEGER(4) :: offset_x,offset_y
+  
+    dx=motion(1)-base(1)
+    dy=motion(2)-base(2)
+!    print *,data_i
+    print *,dx,dy
+    print *,length,width,band
+    idx=int(abs(dx))
+    idy=int(abs(dy))
+    idx2=int(dx)
+    idy2=int(dy)
+    
+    if((idx.ge.1).or.(idy.ge.1)) then
+    
+    if(idx.eq.0) then
+        idx=1
+        dx=1
+    endif
+    if(idy.eq.0) then
+        idy=1
+        dy=1
+    endif
+!    if(dx.eq.0) alpha=999.
+    if(dx.ne.0) alpha = dy/dx
+
+    print *, alpha*real(idx),idy
+    allocate(data(-idy*2:length+idy*2,-idx*2:width+idx*2,band))
+    data(:,:,:)=250
+    data(1:length,1:width,:)=data_i(:,:,:)
+    
+!    print *,alpha,dx
+    if((abs(alpha).lt.1).and.(dx.lt.0)) then
+        size=idx
+
+        allocate(bk_x(idx),bk_y(idx))
+        do i = 1,idx
+            bk_x(i)=i
+        enddo
+        do i = 1,idx
+            bk_y(i)=int(alpha*real(i-1))+1
+        enddo
+!        print *,size,bk_y
+    elseif((abs(alpha).gt.1).and.(dx.lt.0)) then
+        size=idy
+        alpha=dx/dy
+        allocate(bk_x(idy),bk_y(idy))
+        do i = 1,idy
+            bk_y(i)=i
+        enddo
+        do i = 1,idy
+            bk_x(i)=int(alpha*real(i-1))+1
+        enddo    
+    elseif((abs(alpha).lt.1).and.(dx.gt.0)) then
+        size=idx
+        allocate(bk_x(idx),bk_y(idx))
+        do i = 1,idx
+            bk_x(i)=-i
+        enddo
+        do i = 1,idx
+            bk_y(i)=int(-alpha*real(i-1))+1
+        enddo
+    elseif((abs(alpha).gt.1).and.(dx.gt.0)) then
+        size=idy
+        alpha=dx/dy
+        allocate(bk_x(idy),bk_y(idy))
+        do i = 1,idy
+            bk_y(i)=-i
+        enddo
+        do i = 1,idy
+            bk_x(i)=int(-alpha*real(i-1))+1
+        enddo    
+     endif
+
+     data_o(:,:,:)=0
+
+     if(dx.gt.0) then
+     offset_x=idx/2  
+     elseif(dx.le.0) then
+     offset_x=-idx/2
+     endif
+
+     if(dy.gt.0) then
+     offset_y=idy/2
+     elseif(dy.le.0) then
+     offset_y=-idy/2
+     endif
+
+     do j = 1, width
+         do i = 1, length
+         do k =1,size
+                    ii=i+bk_y(k)-1+offset_y
+                    jj=j+bk_x(k)-1+offset_x
+                    data_o(i,j,:)=data_o(i,j,:) + data(ii,jj,:)/real(size)
+               enddo
+         enddo
+     enddo
+     print *, "finish motion blur filtering"
+      else
+      data_o(:,:,:)=data_i(:,:,:)
+      endif
+  
+END SUBROUTINE motion_blur_filter
+
+
 END MODULE Filter

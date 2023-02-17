@@ -78,6 +78,23 @@ def antenna_pattern_integration(integ_time, integ_interval, antenna_func, func_a
     ap = ap / np.max(ap)
     return ap
 
+def calc_boresight_basis_vectors(p,s):
+    #p: ecef obs. location vector at earth surface
+    #s: ecef s/c position vector
+    i,j,k=fpmw.calc_boresight_basis_vectors(p,s)
+    return i,j,k
+
+def calc_local_az_el_angle(i,j,k,b,p0,p):
+    #i,j,k:boresight basis vectors
+    #b: boresight vector
+    #p0: ecef obs location on earth
+    #p: ecef local obs location on earth
+    if len(i.shape)==1:
+        az,el=fpmw.calc_local_az_el_angle(i,j,k,b,p0,p)
+    elif len(i.shape)==2:
+        az,el=fpmw.calc_local_az_el_angle2(i,j,k,b,p0,p)
+    return az, el
+
 
 def run_rSIR(grid_x, grid_y, eaz, time, tb, mask, lon, lat, day, ltod_min, ltod_max, rot_offset, wsize, res):
     test, test2 = fpmw.rsir(

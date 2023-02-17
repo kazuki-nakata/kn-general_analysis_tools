@@ -10,7 +10,7 @@ import geopandas as gpd
 
 
 def matchup(sensor1, sensor2, stime, etime, interval, pinterval, diff_min, aoi_list, trans_for, trans_back):
-    # stime,etime -> datetime object. It is noted that calculation period exeed the period from stime to etime.
+    # stime,etime -> datetime object. It is noted that calculation period exeeds the period from stime to etime.
     # About output data
     # sensor1 #[aoi][scene] #[aoi][start or end][scene]
     # sensor2 #[aoi][sen1_scene][sen2_scene] #[aoi][sen1_scene][start or end][sen2_scene]

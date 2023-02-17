@@ -32,6 +32,21 @@ def copy_dataset(ds, outfile="/vsimem/output.tif"):
     return dst_ds
 
 
+def make_empty_raster(prop, nodata=0, num_band=1, out_dtype=gdal.GDT_Float32, outfile="/vsimem/output.tif"):
+    pixel_x = prop[0]
+    pixel_y = prop[1]
+    geotrans = prop[2]
+    geoproj = prop[3]
+    driver = gdal.GetDriverByName("GTiff")
+    tmp_ds = driver.Create(outfile, pixel_x, pixel_y, num_band, out_dtype)
+    tmp_ds.SetGeoTransform(geotrans)
+    tmp_ds.SetProjection(geoproj)
+    band = tmp_ds.GetRasterBand(1)
+    band.SetNoDataValue(0)
+    band.FlushCache()
+    return tmp_ds
+
+
 # fmt: off
 def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no_data, file_type, geomode="proj",
                            geotrans=None, geoproj=None, gcps=None, gcpsrc=None):
@@ -121,6 +136,10 @@ def make_geoproj(epsg):
     geoproj_wkt = geoproj.ExportToWkt()
     return geoproj_wkt
 
+def make_geoinfo(lt_x,lt_y,res,epsg):
+    geotrans = (lt_x, res, 0.0, lt_y, 0.0, -res)
+    geoproj = make_geoproj(epsg)
+    return geotrans, geoproj
 
 def make_south_nsidc_geoinfo(res):
     geotrans = ((-3950) * 1000, res * 1000, 0.0, (4350) * 1000, 0.0, -res * 1000)
