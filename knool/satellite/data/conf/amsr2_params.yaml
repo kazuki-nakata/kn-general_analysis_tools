@@ -1,5 +1,6 @@
 satellite: "GCOM-W1 (SHIZUKU)"
 obs_direction: "middle"
+equator_crossing_local_time: 13.5
 obs_width: 1450000
 obs_offset: 0
 beam_width:

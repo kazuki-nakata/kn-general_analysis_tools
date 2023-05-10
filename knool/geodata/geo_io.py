@@ -161,10 +161,10 @@ def open_generic_binary(infile, band, length, width, in_dtype=np.float32, byte_o
     return data
 
 
-def make_generic_binary(data, infile, in_dtype=np.float32, byte_order="little"):
+def make_generic_binary(data, outfile, out_dtype=np.float32, byte_order="little"):
     if byte_order == "big":
         data = data.byteswap()
-    data.astype(in_dtype).tofile(infile)
+    data.astype(out_dtype).tofile(outfile)
 
 
 def open_hdf(infile, in_dtype, out_dtype, band, length, width):
@@ -197,9 +197,9 @@ def make_south_nsidc_raster_from_polygon(infile, outfile, width, length, band, f
     ds.FlushCache()
 
 
-def export_vector_from_geom(infile, geometry, dict=None, epsg=4326, srs=None):
+def make_vector_from_geom(geometry, dict=None, epsg=4326, srs=None, outfile="/vsimem/output.shp"):
 
-    ext = os.path.splitext(infile)[::-1][0]
+    ext = os.path.splitext(outfile)[::-1][0]
 
     if ext == ".shp":
         ftype = "ESRI Shapefile"
@@ -210,7 +210,7 @@ def export_vector_from_geom(infile, geometry, dict=None, epsg=4326, srs=None):
         return
 
     driver = ogr.GetDriverByName(ftype)
-    ds = driver.CreateDataSource(infile)
+    ds = driver.CreateDataSource(outfile)
 
     if srs is None:
         srs = osr.SpatialReference()
@@ -229,13 +229,14 @@ def export_vector_from_geom(infile, geometry, dict=None, epsg=4326, srs=None):
     # feature.SetField("id", 1)
     layer.CreateFeature(feature)
     feature = None
-    # Save and close DataSource
-    ds = None
+    # # Save and close DataSource
+    # ds = None
+    return ds
 
 
-def export_vector_from_geomList(infile, geom_list, attr_dict=None, epsg=4326, srs=None):
+def make_vector_from_geomList(geom_list, attr_dict=None, epsg=4326, srs=None, outfile="/vsimem/output.shp"):
 
-    ext = os.path.splitext(infile)[::-1][0]
+    ext = os.path.splitext(outfile)[::-1][0]
 
     if ext == ".shp":
         ftype = "ESRI Shapefile"
@@ -246,7 +247,7 @@ def export_vector_from_geomList(infile, geom_list, attr_dict=None, epsg=4326, sr
         return
 
     driver = ogr.GetDriverByName(ftype)
-    ds = driver.CreateDataSource(infile)
+    ds = driver.CreateDataSource(outfile)
     if srs is None:
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(epsg)
@@ -269,4 +270,5 @@ def export_vector_from_geomList(infile, geom_list, attr_dict=None, epsg=4326, sr
         layer.CreateFeature(feature)
     feature = None
     # Save and close DataSource
-    ds = None
+    # ds = None
+    return ds

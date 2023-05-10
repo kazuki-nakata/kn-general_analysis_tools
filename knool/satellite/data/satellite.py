@@ -234,11 +234,11 @@ class TLEsPerSat:
 
         if self.output_type == "csv_list_line":
             geom = geo_geom.create_lineString([latlon[::sign] for latlon in self.output])
-            geo_io.export_vector_from_geom(infile, geom, None)
+            geo_io.make_vector_from_geom(geom, None, outfile=infile)
 
         elif self.output_type == "csv_list_polygon":
             geom = geo_geom.create_polygon([latlon[::sign] for latlon in self.output])
-            geo_io.export_vector_from_geom(infile, geom, None)
+            geo_io.make_vector_from_geom(geom, None, outfile=infile)
 
         elif self.output_type == "csv_list_polygons":
             geom_list = geo_geom.create_polygons([[latlon[::sign] for latlon in polygon] for polygon in self.output])
@@ -247,7 +247,7 @@ class TLEsPerSat:
                 date_obj.strftime("%Y-%m-%d %H:%M:%S") for date_obj in self.output_attribute["StartTime"]
             ]
             attr["EndTime"] = [date_obj.strftime("%Y-%m-%d %H:%M:%S") for date_obj in self.output_attribute["EndTime"]]
-            geo_io.export_vector_from_geomList(infile, geom_list, attr)
+            geo_io.make_vector_from_geomList(geom_list, attr, outfile=infile)
 
         elif self.output_type == "list_of_geom_list_polygons":
             index = option
@@ -261,7 +261,7 @@ class TLEsPerSat:
             ]
             if sign == -1:
                 [geom.SwapXY() for geom in geom_list]
-            geo_io.export_vector_from_geomList(infile, geom_list, attr)
+            geo_io.make_vector_from_geomList(geom_list, attr, outfile=infile)
 
 
 class SatelliteCatalog:

@@ -4,7 +4,7 @@ import os
 from datetime import datetime as dt
 from datetime import timedelta
 from ...helpers.misc import import_config
-from ...geodata import geo_info, geo_io
+from ...geodata import geo_info, geo_io, geo_geom
 from ...fortlib import pmw_processor
 
 
@@ -28,8 +28,10 @@ class AMSR2_L1B:
             name = val[0].split(":")[2][2:]
             self.subdsID[name] = i
 
-        self.startTime = dt.strptime(self.ds.GetMetadata()["ObservationStartDateTime"], "%Y-%m-%dT%H:%M:%S.%fZ")
-        self.endTime = dt.strptime(self.ds.GetMetadata()["ObservationEndDateTime"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        self.metadata = self.ds.GetMetadata_Dict()
+        self.overlapscans = int(self.metadata["OverlapScans"])
+        self.startTime = dt.strptime(self.metadata["ObservationStartDateTime"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        self.endTime = dt.strptime(self.metadata["ObservationEndDateTime"], "%Y-%m-%dT%H:%M:%S.%fZ")
         self.clip_array = slice(None)
 
     def keys(self):
@@ -57,13 +59,11 @@ class AMSR2_L1B:
         # lat_1d_max = np.max(lat, axis=1)
         # print(lat_1d_min, lat_1d_max)
         print("original size=", lat.shape)
+        ovs = self.overlapscans
         self.clip_array = (lat_1d_min >= lamin) & (lat_1d_min <= lamax)
         if not overlap:
-            overlap = 30
-            self.clip_array[:overlap] = False
-            self.clip_array[-overlap:] = False
-        else:
-            overlap = 0
+            self.clip_array[:ovs] = False
+            self.clip_array[-ovs:] = False
 
         lmax = self.clip_array.shape[0]
         bool1 = False
@@ -74,13 +74,13 @@ class AMSR2_L1B:
             if bool1 & (not self.clip_array[i]):
                 finish = i
                 break
+        if i == lmax - 1:
+            finish = i
 
-        self.startTime_split = (self.endTime - self.startTime) * (start - overlap) / (
-            lmax - overlap * 2
-        ) + self.startTime
-        self.endTime_split = (self.endTime - self.startTime) * (finish - overlap) / (
-            lmax - overlap * 2
-        ) + self.startTime
+        et = self.endTime
+        st = self.startTime
+        self.startTime_split = (et - st) * (start - ovs - 1) / (lmax - ovs * 2 - 1) + st
+        self.endTime_split = (et - st) * (finish - ovs - 1) / (lmax - ovs * 2 - 1) + st
         self.lat = lat[self.clip_array]
         self.lon = lon[self.clip_array]
         self.length, self.width = self.lat.shape
@@ -228,7 +228,7 @@ class AMSR2_L1R:
         sp0 = np.append(sp0, np.array([(sp0[-1] - sp0[-2]) + sp0[-1]]), axis=0)
         sp = np.array([(sp0[1:] - sp0[0:-1]) * i / 243 + sp0[0:-1] for i in range(243)]).transpose(2, 1, 0)
         return sp
-        
+
     def get_earth_incidence(self):
         eaz = self.get_subds(self.subdsID["Earth_Incidence"]).ReadAsArray()[self.clip_array] * 0.01
         self.output = eaz
@@ -370,57 +370,38 @@ class AMSR2_L3:
     def keys(self):
         print(self.subdsID)
 
-    def set_lat_range(self, lamin, lamax):
-        lat = self.get_subds(self.subdsID["Latitude_of_Observation_Point"]).ReadAsArray()
-        lat_1d_min = np.min(lat, axis=1)
-        lat_1d_max = np.max(lat, axis=1)
-        # print(lat_1d_min, lat_1d_max)
-        self.clip_array = (lat_1d_min >= lamin) & (lat_1d_max <= lamax)
-
     def get_subds(self, subdsID):
         ds = gdal.Open(self.ds.GetSubDatasets()[subdsID][0], gdal.GA_ReadOnly)
         return ds
 
-    def get_sic(self, l1r_overlap=False):
-        sic = self.get_subds(self.subdsID["Geophysical_Data"]).ReadAsArray()[self.clip_array][:, :, 0] * 0.1
-        if l1r_overlap:
-            self.clip_array[0:30]
-            if self.clip_array[0]:
-                sic = np.insert(sic, 0, np.full((30, 243), 101), axis=0)
-            if self.clip_array[-1]:
-                sic = np.vstack([sic, np.full((30, 243), 101)])
+    def get_val(self, gain):
+        sic = self.get_subds(self.subdsID["Geophysical_Data"]).ReadAsArray()[:, :, 0] * gain
         return sic
 
-    def get_latlon(self, l1r_overlap=False):
-        lat = self.get_subds(self.subdsID["Latitude_of_Observation_Point"]).ReadAsArray()[self.clip_array]
-        lon = self.get_subds(self.subdsID["Longitude_of_Observation_Point"]).ReadAsArray()[self.clip_array]
-        if l1r_overlap:
-            if self.clip_array[0]:
-                lat = np.insert(lat, 0, np.full((30, 243), 999), axis=0)
-                lon = np.insert(lon, 0, np.full((30, 243), 999), axis=0)
-            if self.clip_array[-1]:
-                lat = np.vstack([lat, np.full((30, 243), 999)])
-                lon = np.vstack([lon, np.full((30, 243), 999)])
+    def get_latlon(self):
+        lat = self.get_subds(self.subdsID["Latitude_of_Observation_Point"]).ReadAsArray()
+        lon = self.get_subds(self.subdsID["Longitude_of_Observation_Point"]).ReadAsArray()
         return lat, lon
 
-    def set_output_prop(self, gcp_x=20, gcp_y=10):
-        lat, lon = self.get_latlon()
-        length, width = lat.shape
+    def set_output_prop(self):
+        ds = self.get_subds(0)
+        dict1 = ds.GetMetadata_Dict()
+        # print(dict1["Resolution"])
+        # if dict1["Resolution"] == "10km":
+        res = int(dict1["Resolution"][0:2])  # km
+        print(res)
+        if dict1["Projection"] == "PS-N":
+            geotrans, geoproj = geo_io.make_north_nsidc_geoinfo(res)
+        if dict1["Projection"] == "PS-S":
+            geotrans, geoproj = geo_io.make_south_nsidc_geoinfo(res)
 
-        gcps = []
-        for ai in np.linspace(0, length - 1, gcp_y):
-            for aj in np.linspace(0, width - 1, gcp_x):
-                i = int(ai)
-                j = int(aj)
-                gcps.append(gdal.GCP(float(lon[i][j]), float(lat[i][j]), 0.0, j + 0.5, i + 0.5))
-
-        source_ref = osr.SpatialReference()
-        source_ref.ImportFromEPSG(4326)
-
-        self.output_prop = [width, length, source_ref, gcps]
+        length, width = self.output.shape
+        self.output_prop = [width, length, geotrans, geoproj]
 
     def export_output(self, filepath, no_data=None, file_type="GTiff", dtype=gdal.GDT_Float32):
-        geo_io.make_raster_with_gcps_from_array(self.output, filepath, dtype, no_data, self.output_prop, file_type)
+        geo_io.make_raster_from_array_and_prop(
+            self.output, filepath, self.output_prop, dtype=dtype, no_data=no_data, file_type=file_type
+        )
         print("Exported")
 
 

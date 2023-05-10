@@ -25,6 +25,20 @@ def reproject(ds, outfile="/vsimem/output.tif", epsg_str="EPSG:4326", NODATA_VAL
     return output_ds
 
 
+def sieve(ds, threshold=10, connectedness=8, outfile="/vsimem/output.tif"):
+    output_ds = geo_io.copy_dataset(ds, outfile=outfile)
+    band = output_ds.GetRasterBand(1)
+    gdal.SieveFilter(
+        srcBand=band,
+        maskBand=None,
+        dstBand=band,
+        threshold=threshold,
+        connectedness=connectedness,
+        callback=gdal.TermProgress_nocb,
+    )
+    return output_ds
+
+
 def geocode(
     ds,
     outfile="/vsimem/output.tif",
@@ -211,11 +225,19 @@ def rasterize_by_raster_with_gcps(
     tmp_ds.FlushCache()
 
 
-def rasterize_by_raster_with_proj(raster_ds, poly_ds, outfile="/vsimem/output.tif"):
+def rasterize_by_raster_with_proj(raster_ds, poly_ds, outfile="/vsimem/output.tif", attr=True):
+    # raster_ds: raster object with only one band
     driver = gdal.GetDriverByName("GTiff")
     dst_ds = driver.CreateCopy(outfile, raster_ds)
+    dst_ds.GetRasterBand(1).Fill(0)
     poly_layer = poly_ds.GetLayer()
-    gdal.RasterizeLayer(dst_ds, [1], poly_layer, options=["ATTRIBUTE=id", "ALL_TOUCHED=TRUE"])  # , burn_values=[1]
+    options = ["ALL_TOUCHED=TRUE"]
+    if attr:
+        options.append("ATTRIBUTE=id")
+        gdal.RasterizeLayer(dst_ds, [1], poly_layer, options=options)
+    else:
+        gdal.RasterizeLayer(dst_ds, [1], poly_layer, options=options, burn_values=[1])
+
     return dst_ds
 
 

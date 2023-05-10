@@ -5,6 +5,21 @@ import numpy as np
 import cv2
 import math
 from PIL import Image
+from ..fortlib import coreg_tool
+
+
+def calc_offset(
+    img1, img2, ix, iy, sim_type=int(1), ndw=int(13), dst=int(1), nsw=int(11), sst=int(1), disdep=float(0.5)
+):
+    # img1 and img2: master and slave images
+    # ix: 1D array of x coordinate where offset is calculated
+    # iy: 1D array of y coordinate where offset is calculated
+    # sim_type: 1=>zncc 2=>ssd 3=>sad 4=>ncc 5=>bbs
+    # ndw and dst : window size and stride
+    # nsw and sst : search window size and stride
+    # disdep: parameter for calculating bbs
+    sim, dx, dy = coreg_tool.calc_offset_type1(img1, img2, ix, iy, sim_type, ndw, dst, nsw, sst, disdep)
+    return sim, dx, dy
 
 
 def resize(img, pixel_x, pixel_y, resample=Image.BOX, box=None, reducing_gap=None):

@@ -4,9 +4,19 @@ import numpy as np
 from . import geo_transform, geo_info
 
 
-def get_stereographic_proj4(lat0, lon0, false_e, false_n):
+def get_stereographic_proj4(lat0, lon0, false_e, false_n, lat_ts):
+    # lat_ts:origin of latitude, southern hemis.: -70, northern hemis.: 70
     proj4 = (
-        "+proj=stere +lat_0=" + str(lat0) + " +lon_0=" + str(lon0) + " +x_0=" + str(false_e) + " +y_0=" + str(false_n)
+        "+proj=stere +lat_0="
+        + str(lat0)
+        + " +lat_ts="
+        + str(lat_ts)
+        + " +lon_0="
+        + str(lon0)
+        + " +x_0="
+        + str(false_e)
+        + " +y_0="
+        + str(false_n)
     )
     return proj4
 
@@ -27,7 +37,7 @@ def get_coord_transform_epsg(source_epsg, target_epsg):
     source_ref = osr.SpatialReference()
     target_ref = osr.SpatialReference()
     source_ref.ImportFromEPSG(source_epsg)
-    target_ref.ImportFromEPSG(target_epsg)    
+    target_ref.ImportFromEPSG(target_epsg)
     if source_epsg == 4326:
         source_ref.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
     if target_epsg == 4326:
@@ -98,25 +108,31 @@ def get_raster_extent(raster):
     xmax = gt[0] + (gt[1] * raster.RasterXSize)
     ymax = gt[3]
 
-    ext=[xmin,ymin,xmax,ymax]
+    ext = [xmin, ymin, xmax, ymax]
     return ext
 
+
 def get_vector_extent(vector_ds):
-    xmin=9.9E33
-    ymin=9.9E33
-    xmax=-9.9E33
-    ymax=-9.9E33
-    
+    xmin = 9.9e33
+    ymin = 9.9e33
+    xmax = -9.9e33
+    ymax = -9.9e33
+
     layer = vector_ds.GetLayer(0)
     for feature in layer:
         geom = feature.GetGeometryRef()
-        xmin0,xmax0,ymin0,ymax0=geom.GetEnvelope()
-        if xmin0<xmin: xmin=xmin0
-        if ymin0<ymin: ymin=ymin0
-        if xmax0>xmax: xmax=xmax0
-        if ymax0>ymax: ymax=ymax0
-    ext=[xmin,ymin,xmax,ymax]
+        xmin0, xmax0, ymin0, ymax0 = geom.GetEnvelope()
+        if xmin0 < xmin:
+            xmin = xmin0
+        if ymin0 < ymin:
+            ymin = ymin0
+        if xmax0 > xmax:
+            xmax = xmax0
+        if ymax0 > ymax:
+            ymax = ymax0
+    ext = [xmin, ymin, xmax, ymax]
     return ext
+
 
 def get_extent_from_corners(corners):
     ext = []
@@ -176,6 +192,12 @@ def get_property_from_raster_with_gcps(raster):
                         AUTHORITY["EPSG","4326"]]"""
         # fmt: on
     return prop
+
+
+def get_local_time_of_day(t_array, lon_array, day, rot_offset=0):
+    lon2 = lon_array - rot_offset
+    ltod = t_array + np.where(lon2 > 180, lon2 - 360, np.where(lon2 < -180, lon2 + 360, lon2)) / 360 - (day - 1)
+    return ltod
 
 
 def calc_distances(lons1, lats1, lons2, lats2):  # unit:km
@@ -239,9 +261,9 @@ def transform_ecef_to_lla(x, y, z, a=6378137.0, b=6356752.314245):
 
 
 def transform_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
-    #x0, y0, z0, lat0, lon0, h0は１次元配列or任意の値で、x,y,zとは大きさが異なっても良い。
-    #本来、x0,y0,z0とlat0,lon0,h0は情報が重複しているので、本関数内でどちらかを計算するのが望ましいが
-    #何回もfoward,backward計算する場合があるので、同じ計算をしないよう両方の情報を引数としている。
+    # x0, y0, z0, lat0, lon0, h0は１次元配列or任意の値で、x,y,zとは大きさが異なっても良い。
+    # 本来、x0,y0,z0とlat0,lon0,h0は情報が重複しているので、本関数内でどちらかを計算するのが望ましいが
+    # 何回もfoward,backward計算する場合があるので、同じ計算をしないよう両方の情報を引数としている。
     #
     if type(x).__module__ != "numpy":
         proc = 2
@@ -278,9 +300,9 @@ def transform_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
 
 
 def transform_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, sx, sy, sz):
-    #x0, y0, z0, lat0, lon0, h0は１次元配列or任意の値で、sx,sy,szとは大きさが異なっても良い。
-    #本来、x0,y0,z0とlat0,lon0,h0は情報が重複しているので、本関数内でどちらかを計算するのが望ましいが
-    #何回もfoward,backward計算する場合があるので、同じ計算をしないよう両方の情報を引数としている。
+    # x0, y0, z0, lat0, lon0, h0は１次元配列or任意の値で、sx,sy,szとは大きさが異なっても良い。
+    # 本来、x0,y0,z0とlat0,lon0,h0は情報が重複しているので、本関数内でどちらかを計算するのが望ましいが
+    # 何回もfoward,backward計算する場合があるので、同じ計算をしないよう両方の情報を引数としている。
 
     if type(sx).__module__ != "numpy":
         proc = 2
@@ -433,7 +455,7 @@ def calc_ocean_area_in_polygon(wkt):
         ocean_area = geometry.Area() / 1000 / 1000
         # trans=geo_info.get_coord_transform_proj4(srs_af, srs_pre)
         # geometry.Transform(trans)
-        # geo_io.export_vector_from_geom("../../test_data/test2.shp",geometry)
+        # geo_io.make_vector_from_geom("../../test_data/test2.shp",geometry)
     except:
         ocean_area = None
     return ocean_area

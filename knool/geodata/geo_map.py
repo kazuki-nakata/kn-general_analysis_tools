@@ -3,13 +3,15 @@ import numpy as np
 from osgeo import osr
 import pandas as pd
 from osgeo import gdal, ogr
-from . import geo_transform, geo_io
+from . import geo_transform, geo_io, geo_geom
+from scipy import interpolate
+from scipy.spatial import cKDTree as KDTree
 
 
 class Search:
-    #本クラスは画素値は入力として与えない。最初に画像Aの各ピクセルの座標値を入力する。
-    #指定したSRS・解像度のグリッドセルに対応する画像Aのピクセルインデックスが割り当てられる。
-    #search_indexに座標値を入力すると、画像Aのピクセルインデックスを高速で取得することができる。
+    # 本クラスは画素値は入力として与えない。最初に画像Aの各ピクセルの座標値を入力する。
+    # その後、指定したSRS・解像度のグリッドセルに対応する画像Aのピクセルインデックスが割り当てられる。
+    # search_indexに座標値を入力すると、画像Aのピクセルインデックスを高速で取得することができる。
     def __init__(self, source_ref, target_ref, iarray, jarray, res):
         # source_ref and target_ref: ref=osr.SpatialReference() -> ref.ImportFromEPSG(epsg)
         self.target_ref = target_ref
@@ -82,8 +84,10 @@ class Search:
             & (trans_array[:, 1] > 0)
             & (trans_array[:, 1] < self.ny)
         ].T
-#        out_ij = np.array([self.map_field_i[trans_array2.tolist()], self.map_field_j[trans_array2.tolist()]])
-        out_ij = np.array([self.map_field_i[tuple(map(tuple, trans_array2))], self.map_field_j[tuple(map(tuple, trans_array2))]])
+        #        out_ij = np.array([self.map_field_i[trans_array2.tolist()], self.map_field_j[trans_array2.tolist()]])
+        out_ij = np.array(
+            [self.map_field_i[tuple(map(tuple, trans_array2))], self.map_field_j[tuple(map(tuple, trans_array2))]]
+        )
         bool_array = out_ij[0, :] != -1
         out_ij = out_ij[:, bool_array]
         index_array2 = index_array2[:, bool_array]
@@ -92,8 +96,9 @@ class Search:
 
 
 class Grid:
-    #ある投影座標系・グリッド設定にデータを落とし込む。
-    #スタックされたデータはpandasのdfとして格納される。
+    # ある投影座標系・グリッド設定にデータの座標値を変換しピクセル値とともにデータフレームとしてスタックする。
+    # 投影グリッドの陸海マスクデータを自動で出力するメソッドを追加。
+    # スタックされたデータはpandasのdfとして格納される。
     def __init__(self, source_ref, target_ref, lt_x, lt_y, rb_x, rb_y, res, colname=["data"]):
         # source_ref and target_ref: ref=osr.SpatialReference() -> ref.ImportFromEPSG(epsg)
         # rt_x,rt_y,lb_x,lb_y: corner position in right top and left bottom cells.
@@ -106,9 +111,11 @@ class Grid:
         self.rb_y = rb_y
         self.lt_x = lt_x
         self.lt_y = lt_y
-        self.colname_list = ["lat", "lon", "grid_x", "grid_y"]
+        self.colname_list = ["num", "lat", "lon", "grid_x", "grid_y"]
         self.colname_list.extend(colname)
         self.df = pd.DataFrame(index=[], columns=self.colname_list)
+        self.num = 0
+        self.concave_hull = []
 
     def get_geotrans(self):
         geotrans = (self.lt_x, self.res, 0.0, self.lt_y, 0.0, -self.res)
@@ -171,12 +178,17 @@ class Grid:
             AoA[idx, 0 : len(LoL[idx])] = LoL[idx]
         return AoA
 
-    def stack(self, iarray, jarray, varray_list):
+    def stack(self, iarray, jarray, varray_list, concave_hull=False):
         # coord_array : For latlon, array(n,2). (n,0)->lat (n,1)->lon
         # output coord_array: array(n,2). (n,0) -> x axis (horizontal)
         coord_array, index_array = self._2Dcoord_to_1Dcoord_and_1Dindex(iarray, jarray)
         trans_array = np.array(self.coord_transform.TransformPoints(coord_array))[:, 0:2]
-        #        trans_array = np.empty(trans_array0.shape)
+
+        if concave_hull:
+            coord_array_ch = self._get_concave_hull(iarray, jarray)
+            trans_array_ch = np.array(self.coord_transform.TransformPoints(coord_array_ch))[:, 0:2]
+            self.concave_hull.append(self._get_concave_hull_mask(trans_array_ch.astype(np.float64)))
+
         trans_array2 = trans_array[
             (trans_array[:, 0] > self.lt_x)
             & (trans_array[:, 0] < self.rb_x)
@@ -202,7 +214,8 @@ class Grid:
         trans_array2[1, :] = (trans_array2[1, :] - self.rb_y) / self.res
 
         # trans_array3 = np.rint(trans_array2)
-        varray_list2 = [coord_array2, trans_array2]
+        num_array = np.full(coord_array2.shape[1], self.num).reshape(1, coord_array2.shape[1])
+        varray_list2 = [num_array, coord_array2, trans_array2]
         for varray in varray_list:
             varray = varray[tuple(map(tuple, index_array2))]
             varray = varray.reshape(1, varray.shape[0])
@@ -211,14 +224,61 @@ class Grid:
         test = np.concatenate(varray_list2, axis=0).T
 
         df = pd.DataFrame(data=test, columns=self.colname_list)  # gi,gj:grid coord, si,sj: data coord
+        print("stack num=", len(df))
         self.df = pd.concat([self.df, df])
-        # test
+        self.num = self.num + 1
 
-    #         map_field_i = np.full((self.nx,self.ny),0)
-    #         map_field_i[trans_array3.tolist()]=index_array2[0]
+    def _get_concave_hull_mask(self, coord):
+        ds_ras = self.make_empty_raster_ds(nodata=0, num_band=1)
+        geom = geo_geom.create_polygon(coord[:, ::-1])
+        ds_poly = geo_io.make_vector_from_geom(geom, epsg=None, srs=self.target_ref, outfile="/vsimem/output.shp")
+        ds_dst = geo_transform.rasterize_by_raster_with_proj(ds_ras, ds_poly, outfile="/vsimem/output2.tif", attr=False)
+        output = ds_dst.ReadAsArray()
+        output = output == 1
+        ds_dst = None
+        ds_poly = None
+        ds_ras = None
+        return output
+
+    def _get_concave_hull(self, iarray, jarray):
+        length, width = iarray.shape
+        iarray2 = np.concatenate([iarray[0, :], iarray[:, width - 1], iarray[length - 1, ::-1], iarray[::-1, 0]])
+        jarray2 = np.concatenate([jarray[0, :], jarray[:, width - 1], jarray[length - 1, ::-1], jarray[::-1, 0]])
+        coord = np.array([iarray2, jarray2]).T
+        return coord
+
+    def get_image(self, val_name, num=0, interp="nearest", mode=1, param=1):
+        # mode 1 -> kdtree mask, param = distance (float, unit: cell num)
+        # mode 2 -> mask by concave hull numpy array
+        nx = self.nx
+        ny = self.ny
+        X = np.linspace(0, nx, nx)
+        Y = np.linspace(0, ny, ny)
+        X, Y = np.meshgrid(X, Y)  # 2D grid for interpolation
+        df = self.df[self.df["num"] == num]
+        grid_x = df["grid_x"].values.astype(np.float32)
+        grid_y = df["grid_y"].values.astype(np.float32)
+        grid_z = df[val_name].values.astype(np.float32)
+
+        if mode == 1:
+            tree = KDTree(np.c_[grid_x, grid_y])
+            dist, _ = tree.query(np.c_[X.ravel(), Y.ravel()], k=1)
+            dist = dist.reshape(X.shape)
+            mask = dist < param
+        elif mode == 2:
+            mask = self.concave_hull[num]
+            if mask.sum() == 0:
+                return np.full(mask.shape, np.nan)
+
+        Z = interpolate.griddata(list(zip(grid_x, grid_y)), grid_z, (X, Y), method=interp)[::-1, :]
+        Z[~mask] = np.nan
+
+        return Z
 
     def flush(self):
         self.df = pd.DataFrame(index=[], columns=self.colname_list)
+        self.num = 0
+        self.concave_hull = []
 
     def export_numpy(self):
         groups = self.df.groupby(["grid_i", "grid_j"])
