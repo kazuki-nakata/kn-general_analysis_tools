@@ -4,6 +4,7 @@ from ...helpers.misc import import_config
 from scipy.special import jv
 from ...geodata import geo_info
 from ...fortlib import pmw_processor as fpmw
+from ...fortlib import grid_data
 
 
 def calc_TBD_TBU_Tau(wv, ts, clw, eaz, freq_list=["6.9GHz", "18.7GHz", "23.8GHz", "36.5GHz", "89.0GHz"]):
@@ -98,20 +99,20 @@ def calc_local_az_el_angle(i, j, k, b, p0, p):
     return az, el
 
 
-def run_rSIR(grid_x, grid_y, eaz, time, tb, mask, lon, lat, day, ltod_min, ltod_max, rot_offset, wsize, res):
-    test, test2 = fpmw.rsir(
-        grid_x,
-        grid_y,
-        eaz,
-        time,
-        tb,
-        mask,
-        lon,
-        lat,
-        int(day),
-        float(ltod_min),
-        float(ltod_max),
-        float(rot_offset),
-        int(wsize),
-        float(res),
-    )
+def l1B_to_l3_WA_TYPE1(grid_x, grid_y, val, mask, wsize, fwhm, res, rm_outer):
+    scale_radius = fwhm / 2
+    sigma = scale_radius * (2 / 2.35482)  # 2*sqrt(2ln2)=2.35482, sigma=sigma/2 for gaussian beam, fwhm/sqrt(2ln2) / 2
+    output = grid_data.weighted_mean_sigma(grid_x, grid_y, val, mask, wsize, sigma, res, rm_outer)
+    return output
+
+
+def l1B_to_l3_WA_TYPE2(grid_x, grid_y, vs, vb, vg, val, mask, wsize, ap, int_ap, res, fwhm, rm_outer):
+    scale_radius = fwhm / 2
+    sigma = scale_radius * (2 / 2.35482)  # 2*sqrt(2ln2)=2.35482, sigma=sigma/2 for gaussian beam, fwhm/sqrt(2ln2) / 2
+    output = grid_data.weighted_mean_sat(grid_x, grid_y, vs, vb, vg, val, mask, wsize, ap, int_ap, res, sigma, rm_outer)
+    return output
+
+
+def run_rSIR(grid_x, grid_y, vs, vb, vg, time, tbv, mask, wsize, ap, int_ap, res, fwhm, iterate):
+    output = fpmw.rsir(grid_x, grid_y, vs, vb, vg, time, tbv, mask, wsize, ap, int_ap, res, fwhm, iterate)
+    return output

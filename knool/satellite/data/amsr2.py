@@ -9,6 +9,11 @@ from ...fortlib import pmw_processor
 
 
 class AMSR2_L1B:
+    """
+    Read AMSR2_L1B data. Just after obj=AMSR2_L1B(hdfpath), you need to perform obj.set_lat_range(latmin,latmax,freq).
+    freq: 6G, 10G, 18G, 36G, 89G_A, 89G_B
+    """
+
     def __init__(self, hdfpath=None):
         if hdfpath is None:
             return
@@ -37,27 +42,50 @@ class AMSR2_L1B:
     def keys(self):
         print(self.subdsID)
 
-    def get_latlon(self, freq="36G"):
-        latA = self.get_subds(self.subdsID["Latitude_of_Observation_Point_for_89A"]).ReadAsArray()
-        lonA = self.get_subds(self.subdsID["Longitude_of_Observation_Point_for_89A"]).ReadAsArray()
+    def _calc_latlon(self, freq):
 
-        if freq == "89G":
-            print("not implemented yet")
-        else:
+        if freq == "89G_A":
+            lat = self.get_subds(self.subdsID["Latitude_of_Observation_Point_for_89A"]).ReadAsArray()
+            lon = self.get_subds(self.subdsID["Longitude_of_Observation_Point_for_89A"]).ReadAsArray()
+        elif freq == "89G_B":
+            lat = self.get_subds(self.subdsID["Latitude_of_Observation_Point_for_89B"]).ReadAsArray()
+            lon = self.get_subds(self.subdsID["Longitude_of_Observation_Point_for_89B"]).ReadAsArray()
+        elif (freq == "6G") | (freq == "7G") | (freq == "10G") | (freq == "18G") | (freq == "23G") | (freq == "36G"):
             freq_str = freq + "-"
-            coreg_1 = float(self.ds.GetMetadata()["CoRegistrationParameterA1"].split(freq_str)[1])
-            coreg_2 = float(self.ds.GetMetadata()["CoRegistrationParameterA2"].split(freq_str)[1])
-            lat, lon = pmw_processor.calc_latlon_from_l1b(latA.T, lonA.T, coreg_1, coreg_2)
+            latA = self.get_subds(self.subdsID["Latitude_of_Observation_Point_for_89A"]).ReadAsArray()
+            lonA = self.get_subds(self.subdsID["Longitude_of_Observation_Point_for_89A"]).ReadAsArray()
+            coreg_1 = float(
+                [
+                    var.split(freq_str)[1]
+                    for var in self.ds.GetMetadata()["CoRegistrationParameterA1"].split(",")
+                    if freq_str in var
+                ][0]
+            )
+            coreg_2 = float(
+                [
+                    var.split(freq_str)[1]
+                    for var in self.ds.GetMetadata()["CoRegistrationParameterA2"].split(",")
+                    if freq_str in var
+                ][0]
+            )
+            lat, lon = pmw_processor.calc_latlon_amsr2_l1b(latA.T, lonA.T, coreg_1, coreg_2)
+            lat = lat.T
+            lon = lon.T
+        else:
+            print("not have the freq data of " + freq)
 
-        lat = lat.T[self.clip_array]
-        lon = lon.T[self.clip_array]
         return lat, lon
 
-    def set_lat_range(self, lamin, lamax, freq="36G", overlap=False):
-        lat, lon = self.get_latlon(freq)
+    def get_latlon(self):
+        return self.lat, self.lon
+
+    def set_lat_range(self, lamin, lamax, freq, overlap=False):
+        """freq: 6G, 7G, 10G, 18G, 23G, 36G, 89G_A, 89G_B"""
+        self.freq = freq
+        self.clip_array = slice(None)
+        lat, lon = self._calc_latlon(freq)
         lat_1d_min = np.min(lat, axis=1)
-        # lat_1d_max = np.max(lat, axis=1)
-        # print(lat_1d_min, lat_1d_max)
+
         print("original size=", lat.shape)
         ovs = self.overlapscans
         self.clip_array = (lat_1d_min >= lamin) & (lat_1d_min <= lamax)
@@ -85,7 +113,7 @@ class AMSR2_L1B:
         self.lon = lon[self.clip_array]
         self.length, self.width = self.lat.shape
 
-    def get_obs_time(self, resolution="low"):
+    def get_obs_time(self):
         st = self.startTime_split
         et = self.endTime_split
         if st is None:
@@ -108,8 +136,22 @@ class AMSR2_L1B:
         ds = gdal.Open(self.ds.GetSubDatasets()[subdsID][0], gdal.GA_ReadOnly)
         return ds
 
-    def get_brightness_temperature(self, subdsID):
-        return self.get_subds(subdsID).ReadAsArray()[self.clip_array] * 0.01
+    def get_brightness_temperature(self):
+        """
+        Just before this method, you need to peform set_lat_range().
+        output is a list of h and v brightness temparature for band selected in set_lat_range()
+        """
+        subdsIDs = {
+            "10G": [1, 2],
+            "18G": [3, 4],
+            "23G": [5, 6],
+            "36G": [7, 8],
+            "6G": [9, 10],
+            "7G": [11, 12],
+            "89G_A": [13, 14],
+            "89G_B": [15, 16],
+        }
+        return [self.get_subds(subdsID).ReadAsArray()[self.clip_array] * 0.01 for subdsID in subdsIDs[self.freq]]
 
     def get_navigation_data(self):
         nav = self.get_subds(self.subdsID["Navigation_Data"]).ReadAsArray()[self.clip_array]
@@ -118,7 +160,9 @@ class AMSR2_L1B:
     def get_satellite_position(self):
         sp0 = self.get_subds(self.subdsID["Navigation_Data"]).ReadAsArray()[self.clip_array, 0:3]
         sp0 = np.append(sp0, np.array([(sp0[-1] - sp0[-2]) + sp0[-1]]), axis=0)
-        sp = np.array([(sp0[1:] - sp0[0:-1]) * i / 243 + sp0[0:-1] for i in range(243)]).transpose(2, 1, 0)
+        sp = np.array([(sp0[1:] - sp0[0:-1]) * i / self.width + sp0[0:-1] for i in range(self.width)]).transpose(
+            2, 1, 0
+        )
         return sp
 
     def get_earth_azimuth(self):
@@ -141,9 +185,9 @@ class AMSR2_L1B:
         self.output = eaz
         return eaz
 
-    def get_land_ocean_flag(self, resolution="36GHz"):
-        num = {"6GHz": 0, "10GHz": 1, "18GHz": 2, "36GHz": 3}
-        loflag = self.get_subds(self.subdsID["Land_Ocean_Flag_6_to_36"]).ReadAsArray()[num[resolution]][self.clip_array]
+    def get_land_ocean_flag(self, freq="36G"):
+        num = {"6G": 0, "10G": 1, "18G": 2, "36G": 3}
+        loflag = self.get_subds(self.subdsID["Land_Ocean_Flag_6_to_36"]).ReadAsArray()[num[freq]][self.clip_array]
         self.output = loflag
         return loflag
 

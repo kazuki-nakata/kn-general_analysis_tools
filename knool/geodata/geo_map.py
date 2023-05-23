@@ -6,6 +6,7 @@ from osgeo import gdal, ogr
 from . import geo_transform, geo_io, geo_geom
 from scipy import interpolate
 from scipy.spatial import cKDTree as KDTree
+from ..fortlib import grid_data
 
 
 class Search:
@@ -111,10 +112,11 @@ class Grid:
         self.rb_y = rb_y
         self.lt_x = lt_x
         self.lt_y = lt_y
-        self.colname_list = ["num", "lat", "lon", "grid_x", "grid_y"]
+        self.colname_list = ["id", "lat", "lon", "grid_x", "grid_y"]
         self.colname_list.extend(colname)
-        self.df = pd.DataFrame(index=[], columns=self.colname_list)
+        self.df = pd.DataFrame(index=[], columns=self.colname_list, dtype="float64")
         self.num = 0
+        self.id_list = []
         self.concave_hull = []
 
     def get_geotrans(self):
@@ -178,7 +180,7 @@ class Grid:
             AoA[idx, 0 : len(LoL[idx])] = LoL[idx]
         return AoA
 
-    def stack(self, iarray, jarray, varray_list, concave_hull=False):
+    def stack(self, iarray, jarray, varray_list, id, concave_hull=False):
         # coord_array : For latlon, array(n,2). (n,0)->lat (n,1)->lon
         # output coord_array: array(n,2). (n,0) -> x axis (horizontal)
         coord_array, index_array = self._2Dcoord_to_1Dcoord_and_1Dindex(iarray, jarray)
@@ -214,7 +216,7 @@ class Grid:
         trans_array2[1, :] = (trans_array2[1, :] - self.rb_y) / self.res
 
         # trans_array3 = np.rint(trans_array2)
-        num_array = np.full(coord_array2.shape[1], self.num).reshape(1, coord_array2.shape[1])
+        num_array = np.full(coord_array2.shape[1], id).reshape(1, coord_array2.shape[1])
         varray_list2 = [num_array, coord_array2, trans_array2]
         for varray in varray_list:
             varray = varray[tuple(map(tuple, index_array2))]
@@ -223,10 +225,14 @@ class Grid:
 
         test = np.concatenate(varray_list2, axis=0).T
 
-        df = pd.DataFrame(data=test, columns=self.colname_list)  # gi,gj:grid coord, si,sj: data coord
+        df = pd.DataFrame(data=test, columns=self.colname_list, dtype="float64")  # gi,gj:grid coord, si,sj: data coord
         print("stack num=", len(df))
-        self.df = pd.concat([self.df, df])
-        self.num = self.num + 1
+        self.df = pd.concat([self.df, df], ignore_index=True)
+
+        id_list = self.id_list
+        id_list.append(id)
+        self.id_list = list(set(id_list))
+        self.num = len(self.id_list)
 
     def _get_concave_hull_mask(self, coord):
         ds_ras = self.make_empty_raster_ds(nodata=0, num_band=1)
@@ -247,38 +253,54 @@ class Grid:
         coord = np.array([iarray2, jarray2]).T
         return coord
 
-    def get_image(self, val_name, num=0, interp="nearest", mode=1, param=1):
-        # mode 1 -> kdtree mask, param = distance (float, unit: cell num)
-        # mode 2 -> mask by concave hull numpy array
+    def get_image(self, var_name, id=0, interp="nearest", mode=1, param=1):
+        """
+        mode 1 -> kdtree mask, param = distance (float, unit: cell num)
+        mode 2 -> mask by concave hull numpy array. param is note used in this mode.
+        mode 3 -> fast computation for nearest neighbor using fortran library. interp is not used in this mode.
+        """
         nx = self.nx
         ny = self.ny
-        X = np.linspace(0, nx, nx)
-        Y = np.linspace(0, ny, ny)
+        X = np.linspace(1, nx, nx)
+        Y = np.linspace(1, ny, ny)
         X, Y = np.meshgrid(X, Y)  # 2D grid for interpolation
-        df = self.df[self.df["num"] == num]
-        grid_x = df["grid_x"].values.astype(np.float32)
-        grid_y = df["grid_y"].values.astype(np.float32)
-        grid_z = df[val_name].values.astype(np.float32)
+        df = self.df[self.df["id"] == id]
+        grid_x = df["grid_x"].values.astype(np.float32) + 0.5
+        grid_y = df["grid_y"].values.astype(np.float32) + 0.5
+        grid_z = df[var_name].values.astype(np.float32)
 
         if mode == 1:
             tree = KDTree(np.c_[grid_x, grid_y])
             dist, _ = tree.query(np.c_[X.ravel(), Y.ravel()], k=1)
             dist = dist.reshape(X.shape)
             mask = dist < param
+            Z = interpolate.griddata(list(zip(grid_x, grid_y)), grid_z, (X, Y), method=interp)[::-1, :]
+
         elif mode == 2:
-            mask = self.concave_hull[num]
+            mask = self.concave_hull[id]
             if mask.sum() == 0:
                 return np.full(mask.shape, np.nan)
+            Z = interpolate.griddata(list(zip(grid_x, grid_y)), grid_z, (X, Y), method=interp)[::-1, :]
 
-        Z = interpolate.griddata(list(zip(grid_x, grid_y)), grid_z, (X, Y), method=interp)[::-1, :]
+        elif mode == 3:
+            mask = self.concave_hull[id]
+            mask_grid = np.zeros([self.nx, self.ny])
+            wsize, res, threshold = param[:]
+            Z = grid_data.nearest_neighbor(grid_x, grid_y, grid_z, mask_grid, wsize, res, threshold).T[::-1, :]
+
         Z[~mask] = np.nan
 
         return Z
 
+    def remove(self, varname, value):
+        df = self.df
+        self.df = df[df[varname] != value]
+
     def flush(self):
-        self.df = pd.DataFrame(index=[], columns=self.colname_list)
+        self.df = pd.DataFrame(index=[], columns=self.colname_list, dtype="float64")
         self.num = 0
         self.concave_hull = []
+        self.id_list = []
 
     def export_numpy(self):
         groups = self.df.groupby(["grid_i", "grid_j"])

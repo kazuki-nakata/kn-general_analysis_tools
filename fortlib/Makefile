@@ -13,7 +13,7 @@ MODS = $(SRCDIR)*.mod
 TARGET = fortlib
 LIB  = lib$(TARGET).a
 
-MAIN = filter.F90 similarity.F90 coregistration.F90 pmw_processor.F90
+MAIN = filter.F90 similarity.F90 coregistration.F90 sensor_geometry.F90 grid_data.F90 pmw_processor.F90
 SUB = sort.o #pmw_processor.o #filter.o
 
 MAINOBJS = $(addprefix $(SRCDIR), $(MAIN))
