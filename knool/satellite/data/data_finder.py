@@ -15,12 +15,16 @@ def matchup(sensor1, sensor2, stime, etime, interval, pinterval, diff_min, aoi_l
     # sensor1 #[aoi][scene] #[aoi][start or end][scene]
     # sensor2 #[aoi][sen1_scene][sen2_scene] #[aoi][sen1_scene][start or end][sen2_scene]
 
-    geom_s1_llist00, _ = sensor1.calc_intersect_scene_areas(stime, etime, interval, pinterval, aoi_list, trans_for)
-    geom_s1_llist0, attr_s1_dlist = sensor1.union_adjacent_scenes(geom_s1_llist00)
+    geom_s1_llist00, _ = sensor1.calc_intersect_scene_areas(
+        stime, etime, interval, pinterval, aoi_list, trans_for)
+    geom_s1_llist0, attr_s1_dlist = sensor1.union_adjacent_scenes(
+        geom_s1_llist00)
     geom_s1_llist = sensor1.transform(geom_s1_llist0, trans_back)
 
-    print("The number of polygon Before Union (Only first AOI):", len(geom_s1_llist00[0]))
-    print("The number of polygon After Union (Only first AOI)::", len(geom_s1_llist[0]))
+    print("The number of polygon Before Union (Only first AOI):",
+          len(geom_s1_llist00[0]))
+    print("The number of polygon After Union (Only first AOI)::",
+          len(geom_s1_llist[0]))
     #    sensor1.export(r"../../test_data/output/final1.shp",option=0)
     #    sensor1.export(r"../../test_data/output/final2.shp",option=0)
     srs_pre = geo_info.get_shifted_wgs84_proj4(0)
@@ -28,12 +32,14 @@ def matchup(sensor1, sensor2, stime, etime, interval, pinterval, diff_min, aoi_l
     geom_s2_llist = []
     attr_s2_dlist = []
     j = 0
-    for attr_s1_dict, geom_s1_list in zip(attr_s1_dlist, geom_s1_llist):  # iterate for regions
+    # iterate for regions
+    for attr_s1_dict, geom_s1_list in zip(attr_s1_dlist, geom_s1_llist):
         geom_s2_list = []
         attr_s2_list = []
         j += 1
         print("aoi number:", j)
-        for i, geom_s1 in enumerate(geom_s1_list):  # iterate for results in a region during a period
+        # iterate for results in a region during a period
+        for i, geom_s1 in enumerate(geom_s1_list):
 
             stime = attr_s1_dict["StartTime"][i] - timedelta(minutes=diff_min)
             etime = attr_s1_dict["StartTime"][i] + timedelta(minutes=diff_min)
@@ -45,7 +51,8 @@ def matchup(sensor1, sensor2, stime, etime, interval, pinterval, diff_min, aoi_l
             trans_back = geo_info.get_coord_transform_proj4(srs_af, srs_pre)
 
             result00, _ = sensor2.calc_intersect_scene_areas(
-                stime, etime, interval, pinterval, [geom_s1], [trans_for], scene_all=True
+                stime, etime, interval, pinterval, [
+                    geom_s1], [trans_for], scene_all=True
             )
             if len(result00[0]) > 0:
                 result0, attr = sensor2.union_adjacent_scenes(result00)
@@ -74,7 +81,7 @@ def make_gdf_from_matchup(geom_s1, attr_s1, geom_s2, attr_s2, aoi_names, limit, 
         ams_n = len(geom_s1[aoi_i])
         stime = attr_s1[aoi_i]["StartTime"]
         etime = attr_s1[aoi_i]["EndTime"]
-        geom_shpl = list(map(geo_table.geom_shpl_from_ogr, geom_s1[aoi_i]))
+        geom_shpl = list(map(geo_table.geom_ogr_to_geom_shpl, geom_s1[aoi_i]))
         aoi = [aoi_names[aoi_i]] * ams_n
         gdf_amsr2 = gpd.GeoDataFrame(
             data=list(zip(aoi, stime, etime, geom_shpl)),
@@ -92,7 +99,8 @@ def make_gdf_from_matchup(geom_s1, attr_s1, geom_s2, attr_s2, aoi_names, limit, 
                 if val1 != 0:
                     res_test[i] = val1
                     res_test[i + limit] = val2
-                    res_test[i + limit * 2] = val3.ExportToIsoWkt()  # geo_table.geom_shpl_from_ogr(val3)
+                    # geo_table.geom_ogr_to_geom_shpl(val3)
+                    res_test[i + limit * 2] = val3.ExportToIsoWkt()
                 else:
                     res_test[i] = None
                     res_test[i + limit] = None
@@ -227,6 +235,7 @@ def get_scene_name_MODIS(date0):
     jday = (date - dt(year, 1, 1)).days + 1
     hour = date.hour
     minute = date.minute
-    name = str(year) + str(jday).zfill(3) + "." + str(hour).zfill(2) + str(minute).zfill(2) + "." + ver
+    name = str(year) + str(jday).zfill(3) + "." + \
+        str(hour).zfill(2) + str(minute).zfill(2) + "." + ver
     #    file_list = ["MYD021KM.A" + naming_rule, "MYD03.A" + naming_rule, "MYD35_L2.A" + naming_rule]
     return name

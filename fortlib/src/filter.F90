@@ -574,23 +574,24 @@ SUBROUTINE Interpolation_type2(inval,isize2,jsize2,ksize2,inlat,inlon,isize,jsiz
             jpos=jsize2
          endif
 
-         if(ipos == -999) then
-         dx=(inlon(i,j)-rlon(jpos2))  / ((rlon(jpos)+360.)-rlon(jpos2))
-         dy=(inlat(i,j)-rlat(1))  / (rlat(2)-rlat(ipos2))
-            else
-         dx=(inlon(i,j)-rlon(jpos2)) / (rlon(jpos)-rlon(jpos2))
-         dy=(inlat(i,j)-rlat(ipos2))  / (rlat(ipos)-rlat(ipos2))
+         if(jpos == -999) then
+            dx=(inlon(i,j)-(rlon(jpos2)+360.))  / ((rlon(jpos))-rlon(jpos2))
+         else
+            dx=(inlon(i,j)-rlon(jpos2)) / (rlon(jpos)-rlon(jpos2))
          endif
+
+         dy=(inlat(i,j)-rlat(ipos2)) / (rlat(ipos)-rlat(ipos2))
 
          ipos =isize2-ipos+1
          ipos2=isize2-ipos2+1
 
          do k = 1, ksize2
             output(k,i,j) = bilin(dy,dx,Undef, &
+                           inval(k,ipos2,jpos2), &
                            inval(k,ipos,jpos2), &
-                           inval(k,ipos ,jpos), &
-                           inval(k,ipos2  ,jpos ), &
-                           inval(k,ipos2,jpos2  ))
+                           inval(k,ipos,jpos), &
+                           inval(k,ipos2,jpos))
+
          enddo
       enddo
       enddo

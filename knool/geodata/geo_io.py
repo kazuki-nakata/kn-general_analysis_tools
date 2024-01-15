@@ -73,7 +73,7 @@ def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no
     elif geomode == "gcp":
         ds.SetGCPs(gcps, gcpsrc)
 
-    ds.SetMetadata({'TIFFTAG_COPYRIGHT': 'KN_TOOL'}) 
+    ds.SetMetadata({'TIFFTAG_COPYRIGHT': 'KN_TOOL'})
     ds.SetMetadata({'TIFFTAG_XRESOLUTION': '1/1'})
     ds.SetMetadata({'TIFFTAG_YRESOLUTION': '1/1'})
 
@@ -136,29 +136,45 @@ def make_geoproj(epsg):
     geoproj_wkt = geoproj.ExportToWkt()
     return geoproj_wkt
 
-def make_geoinfo(lt_x,lt_y,res,epsg):
+
+def make_geoinfo(lt_x, lt_y, res, epsg):
     geotrans = (lt_x, res, 0.0, lt_y, 0.0, -res)
     geoproj = make_geoproj(epsg)
     return geotrans, geoproj
 
+
 def make_south_nsidc_geoinfo(res):
-    geotrans = ((-3950) * 1000, res * 1000, 0.0, (4350) * 1000, 0.0, -res * 1000)
+    geotrans = ((-3950) * 1000, res * 1000, 0.0,
+                (4350) * 1000, 0.0, -res * 1000)
     geoproj = make_geoproj(3412)
     return geotrans, geoproj
 
 
 def make_north_nsidc_geoinfo(res):
-    geotrans = ((-3850) * 1000, res * 1000, 0.0, (5850) * 1000, 0.0, -res * 1000)
+    geotrans = ((-3850) * 1000, res * 1000, 0.0,
+                (5850) * 1000, 0.0, -res * 1000)
     geoproj = make_geoproj(3411)
     return geotrans, geoproj
 
 
 def open_generic_binary(infile, band, length, width, in_dtype=np.float32, byte_order="little"):
     with open(infile, mode="rb") as f:
-        data = np.fromfile(f, dtype=in_dtype, sep="").reshape(band, length, width)
+        data = np.fromfile(f, dtype=in_dtype, sep="").reshape(
+            band, length, width)
     if byte_order == "big":
         data = data.byteswap()
     return data
+
+
+def open_generic_binary_direct(infile, rec_list, count, in_dtype=np.float32, byte_order="little"):
+    data_list = []
+    for rec in rec_list:
+        with open(infile, mode="rb") as f:
+            data = np.fromfile(f, dtype=in_dtype, count=count, offset=rec*4)[0]
+            if byte_order == "big":
+                data = data.byteswap()
+            data_list.append(data)
+    return data_list
 
 
 def make_generic_binary(data, outfile, out_dtype=np.float32, byte_order="little"):
@@ -192,7 +208,8 @@ def make_south_nsidc_raster_from_polygon(infile, outfile, width, length, band, f
     band.SetNoDataValue(0)
     band.FlushCache()
 
-    gdal.RasterizeLayer(ds, [1], source_layer, options=["ATTRIBUTE=id", "ALL_TOUCHED=TRUE"])  # , burn_values=[1]
+    gdal.RasterizeLayer(ds, [1], source_layer, options=[
+                        "ATTRIBUTE=id", "ALL_TOUCHED=TRUE"])  # , burn_values=[1]
     #    gdal.RasterizeLayer(ds, [1], source_layer,burn_values=[1])
     ds.FlushCache()
 
@@ -258,7 +275,8 @@ def make_vector_from_geomList(geom_list, attr_dict=None, epsg=4326, srs=None, ou
         layer.CreateField(idField)
     else:
         keys = attr_dict.keys()
-        [layer.CreateField(ogr.FieldDefn(key, OGRTypes[type(attr_dict[key][0])])) for key in keys]
+        [layer.CreateField(ogr.FieldDefn(
+            key, OGRTypes[type(attr_dict[key][0])])) for key in keys]
 
     featureDefn = layer.GetLayerDefn()
     feature = ogr.Feature(featureDefn)

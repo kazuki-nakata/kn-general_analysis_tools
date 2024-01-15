@@ -9,23 +9,27 @@ from ..fortlib import coreg_tool
 
 
 def calc_offset(
-    img1, img2, ix, iy, sim_type=int(1), ndw=int(13), dst=int(1), nsw=int(11), sst=int(1), disdep=float(0.5)
+    img1, img2, iy, ix, sim_type=int(1), ndw=int(13), dst=int(1), nsw=int(11), sst=int(1), disdep=float(0.5)
 ):
-    # img1 and img2: master and slave images
-    # ix: 1D array of x coordinate where offset is calculated
-    # iy: 1D array of y coordinate where offset is calculated
-    # sim_type: 1=>zncc 2=>ssd 3=>sad 4=>ncc 5=>bbs
-    # ndw and dst : window size and stride
-    # nsw and sst : search window size and stride
-    # disdep: parameter for calculating bbs
-    sim, dx, dy = coreg_tool.calc_offset_type1(img1, img2, ix, iy, sim_type, ndw, dst, nsw, sst, disdep)
-    return sim, dx, dy
+    """
+    img1 and img2: master and slave images
+    ix: 1D array of x coordinate where offset is calculated
+    iy: 1D array of y coordinate where offset is calculated
+    sim_type: 1=>zncc 2=>ssd 3=>sad 4=>ncc 5=>bbs
+    ndw and dst : window size and stride
+    nsw and sst : search window size and stride
+    disdep: parameter for calculating bbs
+    """
+    sim, dy, dx = coreg_tool.calc_offset_type1(
+        img1, img2, iy, ix, sim_type, ndw, dst, nsw, sst, disdep)
+    return sim, dy, dx
 
 
 def resize(img, pixel_x, pixel_y, resample=Image.BOX, box=None, reducing_gap=None):
     #     Image.NEAREST Image.BOX Image.BILINEAR Image.HAMMING Image.BICUBIC Image.LANCZOS
     img2 = Image.fromarray(img)
-    img2 = img2.resize((pixel_y, pixel_x), resample=resample, box=None, reducing_gap=None)
+    img2 = img2.resize((pixel_y, pixel_x), resample=resample,
+                       box=None, reducing_gap=None)
     return np.array(img2)
 
 
@@ -39,7 +43,8 @@ def split(img, n, m, b):
     h_size = img.shape[2] // ph_size * ph_size
     img = img[0:b, :v_size, :h_size]
     out_img = []
-    [out_img.extend(np.split(h_img, n, axis=2)) for h_img in np.split(img, m, axis=1)]
+    [out_img.extend(np.split(h_img, n, axis=2))
+     for h_img in np.split(img, m, axis=1)]
     return out_img
 
 
@@ -115,12 +120,18 @@ def perspective_transformation(img, rot_x, rot_y, rot_z, meter, move):
         dtype=np.float32,
     )
 
-    ul_t = np.dot(np.dot(X, np.dot(Y, Z)), ul)[0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), ul)[2] / R)
-    ur_t = np.dot(np.dot(X, np.dot(Y, Z)), ur)[0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), ur)[2] / R)
-    bl_t = np.dot(np.dot(X, np.dot(Y, Z)), bl)[0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), bl)[2] / R)
-    br_t = np.dot(np.dot(X, np.dot(Y, Z)), br)[0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), br)[2] / R)
-    base_t = np.dot(np.dot(X, np.dot(Y, Z)), base)[0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), base)[2] / R)
-    move_t = np.dot(np.dot(X, np.dot(Y, Z)), move2)[0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), move2)[2] / R)
+    ul_t = np.dot(np.dot(X, np.dot(Y, Z)), ul)[
+        0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), ul)[2] / R)
+    ur_t = np.dot(np.dot(X, np.dot(Y, Z)), ur)[
+        0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), ur)[2] / R)
+    bl_t = np.dot(np.dot(X, np.dot(Y, Z)), bl)[
+        0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), bl)[2] / R)
+    br_t = np.dot(np.dot(X, np.dot(Y, Z)), br)[
+        0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), br)[2] / R)
+    base_t = np.dot(np.dot(X, np.dot(Y, Z)), base)[
+        0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), base)[2] / R)
+    move_t = np.dot(np.dot(X, np.dot(Y, Z)), move2)[
+        0:2] / (1 - np.dot(np.dot(X, np.dot(Y, Z)), move2)[2] / R)
 
     xmin = min(ul_t[1], ur_t[1], bl_t[1], br_t[1])
     ymin = min(ul_t[0], ur_t[0], bl_t[0], br_t[0])
@@ -150,7 +161,8 @@ def perspective_transformation(img, rot_x, rot_y, rot_z, meter, move):
     cols = int(ymax)
     rows = int(xmax)
 
-    trans_img = cv2.warpPerspective(img, M, (cols, rows), borderMode=cv2.BORDER_REPLICATE)  # [::-1,:]
+    trans_img = cv2.warpPerspective(
+        img, M, (cols, rows), borderMode=cv2.BORDER_REPLICATE)  # [::-1,:]
     #    trans_img = cv2.warpPerspective(img,M,(cols,rows))
     #    trans_img = cv2.getRectSubPix(trans_img,(400,400),(0,0))
     #    print("test",img.shape,trans_img.shape)
@@ -172,7 +184,8 @@ def perspective_transformation_inverse(img, pts1, pts2):
     cols = int(max(pts2[0][0], pts2[1][0], pts2[2][0], pts2[3][0]))
 
     M = cv2.getPerspectiveTransform(pts1, pts2)
-    trans_img = cv2.warpPerspective(img, M, (cols, rows), borderMode=cv2.BORDER_REPLICATE)
+    trans_img = cv2.warpPerspective(
+        img, M, (cols, rows), borderMode=cv2.BORDER_REPLICATE)
     return trans_img
 
 
@@ -216,7 +229,8 @@ def motion_blur(img, base, motion):
                 for k in range(0, size4):
                     ii = i + blur_kernel_x[k]
                     jj = j + blur_kernel_y[k]
-                    img2[i, j, :] = img2[i, j, :] + img[ii, jj] * blur_kernel[k]
+                    img2[i, j, :] = img2[i, j, :] + \
+                        img[ii, jj] * blur_kernel[k]
     return img2
 
 
@@ -235,7 +249,8 @@ def image_multi_process(func, width_n, height_n, out_band, out_dtype, inArray, a
     ijksize3 = out_band, jsize, isize
     data_pre = []
 
-    [data_pre.append(np.zeros(ijksize2, dtype=out_dtype)) for n in range(width_n * height_n)]
+    [data_pre.append(np.zeros(ijksize2, dtype=out_dtype))
+     for n in range(width_n * height_n)]
 
     del inArray
     # --------calculation------------
@@ -243,7 +258,8 @@ def image_multi_process(func, width_n, height_n, out_band, out_dtype, inArray, a
     pipes = []
     jobs = []
     n3 = -1
-    for m in range(1, height_n + 1):  # octave number (octave number * core number = process number)
+    # octave number (octave number * core number = process number)
+    for m in range(1, height_n + 1):
 
         for n in range(1, width_n + 1):  # core number
             n1 = width_n * (m - 1) + n - 1

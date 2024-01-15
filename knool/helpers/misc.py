@@ -9,8 +9,9 @@ from datetime import datetime, timedelta
 
 def hour_rounder(t):
     return (t.replace(second=0, microsecond=0, minute=0, hour=t.hour)
-               +timedelta(hours=t.minute//30))
-    
+            + timedelta(hours=t.minute//30))
+
+
 def deco_print_time(start_message: str, end_message: str):
     def _print_args(func):
         def new_function(*args, **kwargs):
@@ -29,7 +30,7 @@ def deco_print_time(start_message: str, end_message: str):
 def import_config(config_path):
     conf_dir = os.path.dirname(os.path.abspath(config_path))
     conf_name = os.path.basename(config_path)
-    with initialize_config_dir(config_dir=conf_dir):
+    with initialize_config_dir(config_dir=conf_dir, version_base=None):
         conf = compose(config_name=conf_name)
     return conf
 

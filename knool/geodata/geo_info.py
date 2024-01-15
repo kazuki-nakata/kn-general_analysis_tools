@@ -21,9 +21,26 @@ def get_stereographic_proj4(lat0, lon0, false_e, false_n, lat_ts):
     return proj4
 
 
+def get_space_oblique_mercator_proj4(inc_angle, ps_rev, asc_lon, false_e, false_n):
+    proj4 = (
+        "+proj=som +inc_angle=" + str(inc_angle) + " +ps_rev=" + str(ps_rev) + " +asc_lon=" + str(asc_lon) + " +lon0=" + str(250) +
+        " +x_0=" + str(false_e) + " +y_0=" + str(false_n)
+    )
+    return proj4
+
+
+def get_oblique_mercator_proj4(alpha, lonc, lat_0, false_e, false_n):
+    proj4 = (
+        "+proj=omerc +gamma=" + str(alpha) + " +lonc=" + str(lonc) + " +lat_0=" + str(lat_0) +
+        " +x_0=" + str(false_e) + " +y_0=" + str(false_n)
+    )
+    return proj4
+
+
 def get_orthographic_proj4(lat0, lon0, false_e, false_n):
     proj4 = (
-        "+proj=ortho +lat_0=" + str(lat0) + " +lon_0=" + str(lon0) + " +x_0=" + str(false_e) + " +y_0=" + str(false_n)
+        "+proj=ortho +lat_0=" + str(lat0) + " +lon_0=" + str(lon0) +
+        " +x_0=" + str(false_e) + " +y_0=" + str(false_n)
     )
     return proj4
 
@@ -81,13 +98,17 @@ def get_latlons_from_raster(raster, interval=1):
     xorder_vector = np.arange(0, width, interval) + 0.5
     yorder_vector = np.arange(0, height, interval) + 0.5
 
-    loc_x = np.array([gt[0] + xorder_vector * gt[1] + yorder * gt[2] for yorder in yorder_vector])
-    loc_y = np.array([gt[3] + xorder_vector * gt[4] + yorder * gt[5] for yorder in yorder_vector])
+    loc_x = np.array([gt[0] + xorder_vector * gt[1] + yorder * gt[2]
+                     for yorder in yorder_vector])
+    loc_y = np.array([gt[3] + xorder_vector * gt[4] + yorder * gt[5]
+                     for yorder in yorder_vector])
     cols = loc_x.shape[0]
     rows = loc_x.shape[1]
-    loc_p = np.array([loc_x.reshape(cols * rows), loc_y.reshape(cols * rows)]).T  # .tolist()
+    loc_p = np.array([loc_x.reshape(cols * rows),
+                     loc_y.reshape(cols * rows)]).T  # .tolist()
     latlon = transform.TransformPoints(loc_p)
-    latlon = np.array(latlon)[:, 0:2].reshape(cols, rows, 2).transpose((2, 0, 1))
+    latlon = np.array(latlon)[:, 0:2].reshape(
+        cols, rows, 2).transpose((2, 0, 1))
     return latlon
 
 
@@ -136,10 +157,14 @@ def get_vector_extent(vector_ds):
 
 def get_extent_from_corners(corners):
     ext = []
-    ext.append(min([corners[0][0], corners[1][0], corners[2][0], corners[3][0]]))
-    ext.append(min([corners[0][1], corners[1][1], corners[2][1], corners[3][1]]))
-    ext.append(max([corners[0][0], corners[1][0], corners[2][0], corners[3][0]]))
-    ext.append(max([corners[0][1], corners[1][1], corners[2][1], corners[3][1]]))
+    ext.append(
+        min([corners[0][0], corners[1][0], corners[2][0], corners[3][0]]))
+    ext.append(
+        min([corners[0][1], corners[1][1], corners[2][1], corners[3][1]]))
+    ext.append(
+        max([corners[0][0], corners[1][0], corners[2][0], corners[3][0]]))
+    ext.append(
+        max([corners[0][1], corners[1][1], corners[2][1], corners[3][1]]))
     return ext
 
 
@@ -164,7 +189,8 @@ def get_property_from_raster_with_proj(raster):
     prop.append(raster.RasterYSize)
     prop.append(raster.GetGeoTransform())
     prop.append(raster.GetProjection())
-    prop.append(osr.SpatialReference(wkt=raster.GetProjection()).GetAttrValue("AUTHORITY", 1))
+    prop.append(osr.SpatialReference(
+        wkt=raster.GetProjection()).GetAttrValue("AUTHORITY", 1))
     prop.append(raster.GetDriver())
     return prop
 
@@ -196,7 +222,8 @@ def get_property_from_raster_with_gcps(raster):
 
 def get_local_time_of_day(t_array, lon_array, day, rot_offset=0):
     lon2 = lon_array - rot_offset
-    ltod = t_array + np.where(lon2 > 180, lon2 - 360, np.where(lon2 < -180, lon2 + 360, lon2)) / 360 - (day - 1)
+    ltod = t_array + np.where(lon2 > 180, lon2 - 360,
+                              np.where(lon2 < -180, lon2 + 360, lon2)) / 360 - (day - 1)
     return ltod
 
 
@@ -208,7 +235,8 @@ def calc_distances(lons1, lats1, lons2, lats2):  # unit:km
     lat2 = np.radians(lats2)
     dlon = lon2 - lon1
     dlat = lat2 - lat1
-    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * \
+        np.cos(lat2) * np.sin(dlon / 2) ** 2
     c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
     distance = R * c
     return distance
@@ -289,7 +317,8 @@ def transform_ecef_to_enu(x0, y0, z0, lat0, lon0, h0, x, y, z):
     clat = np.cos(lat)
     zero_arr = np.zeros(x0.shape)
     R = np.array(
-        [[-slon, clon, zero_arr], [-slat * clon, -slat * slon, clat], [clat * clon, clat * slon, slat]]
+        [[-slon, clon, zero_arr], [-slat * clon, -slat *
+                                   slon, clat], [clat * clon, clat * slon, slat]]
     )  # .transpose([0, 1, 2])
     # print(R.shape)
     if proc == 1:
@@ -321,7 +350,8 @@ def transform_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, sx, sy, sz):
     clat = np.cos(lat)
     zero_arr = np.zeros(x0.shape)
     R = np.array(
-        [[-slon, -slat * clon, clat * clon], [clon, -slat * slon, clat * slon], [zero_arr, clat, slat]]
+        [[-slon, -slat * clon, clat * clon],
+            [clon, -slat * slon, clat * slon], [zero_arr, clat, slat]]
     )  # .transpose([0, 1, 2])
 
     if proc == 1:
@@ -359,7 +389,8 @@ def calc_slant_range1(gdlat, theta_inc, theta_look, h):
     # h: s/c height
     # theta_look: sensor look angle (obtained from offnadir angle and attitude data)
     ea = theta_inc - theta_look
-    re = h * np.sin(theta_look) / (np.sin(np.pi - theta_inc) - np.sin(theta_look))
+    re = h * np.sin(theta_look) / \
+        (np.sin(np.pi - theta_inc) - np.sin(theta_look))
     # re=calc_prime_vertical_radius(gdlat,a=a,b=b)
     # srange = re * (np.sqrt(((h + re) / re) ** 2 - np.cos(np.pi / 2 - theta_inc) ** 2) - np.sin(np.pi / 2 - theta_inc))
     srange = re * np.sin(ea) / np.sin(theta_look)
@@ -372,7 +403,8 @@ def calc_slant_range2(gdlat, theta_inc, theta_look, h):
     # h: s/c height
     # theta_look: sensor look angle (obtained from offnadir angle and attitude data)
     ea = theta_inc - theta_look
-    re = h * np.sin(theta_look) / (np.sin(np.pi - theta_inc) - np.sin(theta_look))
+    re = h * np.sin(theta_look) / \
+        (np.sin(np.pi - theta_inc) - np.sin(theta_look))
     # re=calc_prime_vertical_radius(gdlat,a=a,b=b)
     # srange = re * (np.sqrt(((h + re) / re) ** 2 - np.cos(np.pi / 2 - theta_inc) ** 2) - np.sin(np.pi / 2 - theta_inc))
     srange = re * np.sin(ea) / np.sin(theta_look)
@@ -434,8 +466,10 @@ def calc_ocean_area_in_polygon(wkt):
         geometry = ogr.CreateGeometryFromWkt(wkt)
         lon, lat, _ = geometry.Centroid().GetPoint()
         minX, maxX, minY, maxY = geometry.GetEnvelope()
-        raster = gdal.Open(os.path.dirname(__file__) + os.sep + "data/gshhg_2.3.7_shp_i_rasterize0.05.tif")
-        raster_clip = geo_transform.clip_rectangle(raster, minX, minY, maxX, maxY)
+        raster = gdal.Open(os.path.dirname(__file__) +
+                           os.sep + "data/gshhg_2.3.7_shp_i_rasterize0.05.tif")
+        raster_clip = geo_transform.clip_rectangle(
+            raster, minX, minY, maxX, maxY)
 
         srs_pre = geo_info.get_shifted_wgs84_proj4(0)
         srs_af = geo_info.get_orthographic_proj4(lat, lon, 0, 0)

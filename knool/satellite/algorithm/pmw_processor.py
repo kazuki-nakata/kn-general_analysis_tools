@@ -4,7 +4,9 @@ from ...helpers.misc import import_config
 from scipy.special import jv
 from ...geodata import geo_info
 from ...fortlib import pmw_processor as fpmw
+from ...fortlib import pmw_processor_l1b as fpmwl1b
 from ...fortlib import grid_data
+from ...fortlib import sensor_geometry as sg
 
 
 def calc_TBD_TBU_Tau(wv, ts, clw, eaz, freq_list=["6.9GHz", "18.7GHz", "23.8GHz", "36.5GHz", "89.0GHz"]):
@@ -13,14 +15,17 @@ def calc_TBD_TBU_Tau(wv, ts, clw, eaz, freq_list=["6.9GHz", "18.7GHz", "23.8GHz"
     params = import_config(config_path=config_path)
 
     rad = np.radians(eaz)
-    tv = np.where(wv <= 48, 273.16 + 0.8337 * wv - 3.029 * (10 ** (-5)) * wv**3.33, 301.16)
-    zeta = np.where(np.abs(ts - tv) <= 20, 1.05 * (ts - tv) * (1 - (ts - tv) ** 2 / 1200), np.sign(ts - tv) * 14)
+    tv = np.where(wv <= 48, 273.16 + 0.8337 * wv -
+                  3.029 * (10 ** (-5)) * wv**3.33, 301.16)
+    zeta = np.where(np.abs(ts - tv) <= 20, 1.05 * (ts - tv) *
+                    (1 - (ts - tv) ** 2 / 1200), np.sign(ts - tv) * 14)
 
     output = []
 
     for freq in freq_list:
         p = params["atmosphere"][freq]
-        td = p["b0"] + p["b1"] * wv + p["b2"] * wv**2 + p["b3"] * wv**3 + p["b4"] * wv**4 + p["b5"] * zeta
+        td = p["b0"] + p["b1"] * wv + p["b2"] * wv**2 + \
+            p["b3"] * wv**3 + p["b4"] * wv**4 + p["b5"] * zeta
         tu = td + p["b6"] + p["b7"] * wv
 
         ao = p["aO1"] + p["aO2"] * (td - 270)
@@ -49,7 +54,8 @@ def get_antenna_pattern_gaussian_beam(fwhm_x, fwhm_y, x_array, y_array, offset_x
     # fwhm:footprint size(-3db) nx,ny: km for azimuth and elevation axis
     sigma_x = fwhm_x / np.sqrt(2 * np.log(2))
     sigma_y = fwhm_y / np.sqrt(2 * np.log(2))
-    Z = np.exp(-2 * ((x_array - offset_x) ** 2 / (sigma_x**2) + (y_array - offset_y) ** 2 / (sigma_y**2)))
+    Z = np.exp(-2 * ((x_array - offset_x) ** 2 / (sigma_x**2) +
+               (y_array - offset_y) ** 2 / (sigma_y**2)))
     return Z
 
 
@@ -66,7 +72,8 @@ def get_antenna_pattern_bessel_beam(fwhm_x, fwhm_y, x_array, y_array, offset_x=0
 
 def antenna_pattern_integration(integ_time, integ_interval, antenna_func, func_args, rot_velo=40.0):
 
-    itime_list = np.arange(-integ_time / 2, integ_time / 2 + integ_interval, integ_interval) * 10 ** (-3)  # second
+    itime_list = np.arange(-integ_time / 2, integ_time / 2 +
+                           integ_interval, integ_interval) * 10 ** (-3)  # second
     r = rot_velo * 2 * np.pi / 60  # radian/s
     ap = 0
     for itime in itime_list:
@@ -83,7 +90,7 @@ def antenna_pattern_integration(integ_time, integ_interval, antenna_func, func_a
 def calc_boresight_basis_vectors(p, s):
     # p: ecef obs. location vector at earth surface
     # s: ecef s/c position vector
-    i, j, k = fpmw.calc_boresight_basis_vectors(p, s)
+    i, j, k = sg.calc_boresight_basis_vectors(p, s)
     return i, j, k
 
 
@@ -93,26 +100,43 @@ def calc_local_az_el_angle(i, j, k, b, p0, p):
     # p0: ecef obs location on earth
     # p: ecef local obs location on earth
     if len(i.shape) == 1:
-        az, el = fpmw.calc_local_az_el_angle(i, j, k, b, p0, p)
+        az, el = sg.calc_local_az_el_angle(i, j, k, b, p0, p)
     elif len(i.shape) == 2:
-        az, el = fpmw.calc_local_az_el_angle2(i, j, k, b, p0, p)
+        az, el = sg.calc_local_az_el_angle2(i, j, k, b, p0, p)
     return az, el
 
 
 def l1B_to_l3_WA_TYPE1(grid_x, grid_y, val, mask, wsize, fwhm, res, rm_outer):
-    scale_radius = fwhm / 2
-    sigma = scale_radius * (2 / 2.35482)  # 2*sqrt(2ln2)=2.35482, sigma=sigma/2 for gaussian beam, fwhm/sqrt(2ln2) / 2
-    output = grid_data.weighted_mean_sigma(grid_x, grid_y, val, mask, wsize, sigma, res, rm_outer)
+    sigma = fwhm / (2 * np.sqrt(np.log(2)))
+    output = grid_data.weighted_mean_sigma(
+        grid_x, grid_y, val, mask, wsize, sigma, res, rm_outer)
     return output
 
 
 def l1B_to_l3_WA_TYPE2(grid_x, grid_y, vs, vb, vg, val, mask, wsize, ap, int_ap, res, fwhm, rm_outer):
-    scale_radius = fwhm / 2
-    sigma = scale_radius * (2 / 2.35482)  # 2*sqrt(2ln2)=2.35482, sigma=sigma/2 for gaussian beam, fwhm/sqrt(2ln2) / 2
-    output = grid_data.weighted_mean_sat(grid_x, grid_y, vs, vb, vg, val, mask, wsize, ap, int_ap, res, sigma, rm_outer)
+    sigma = fwhm / (2 * np.sqrt(np.log(2)))
+    output = grid_data.weighted_mean_sat(
+        grid_x, grid_y, vs, vb, vg, val, mask, wsize, ap, int_ap, res, sigma, rm_outer)
     return output
 
 
-def run_rSIR(grid_x, grid_y, vs, vb, vg, time, tbv, mask, wsize, ap, int_ap, res, fwhm, iterate):
-    output = fpmw.rsir(grid_x, grid_y, vs, vb, vg, time, tbv, mask, wsize, ap, int_ap, res, fwhm, iterate)
+def run_rSIR(grid_x, grid_y, vs, vb, vg, tbv, mask, wsize, ap, int_ap, res, fwhm, iterate):
+    output = fpmw.rsir(grid_x, grid_y, vs, vb, vg, tbv,
+                       mask, wsize, ap, int_ap, res, fwhm, iterate)
+    return output
+
+
+def run_rSIR_SS(grid_x, grid_y, grid_id, vs, vb, vg, tbv, mask, id1, id2, wsize, ap, int_ap, res, fwhm, iterate):
+    output = fpmw.rsir2(grid_x, grid_y, grid_id, vs, vb, vg, tbv,
+                        mask, id1, id2, wsize, ap, int_ap, res, fwhm, iterate)
+    return output
+
+
+def run_re_iteration_l1b(grid_x, grid_y, vs, vb, vg, tbv, mask, init, wsize, ap, int_ap, wr, params, method):
+    if method == "rsir":
+        output = fpmwl1b.rsir(grid_x, grid_y, vs, vb, vg, tbv,
+                              mask, init, wsize, ap, int_ap, wr, params)
+    elif method == "banach":
+        output = fpmwl1b.banach_gradient(grid_x, grid_y, vs, vb, vg, tbv,
+                                         mask, init, wsize, ap, int_ap, wr, params[0], params[1], params[2])
     return output

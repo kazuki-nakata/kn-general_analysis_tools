@@ -12,3 +12,4 @@ gdal
 xarray
 cython
 hydra-core
+skyfield
