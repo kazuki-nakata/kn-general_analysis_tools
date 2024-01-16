@@ -196,7 +196,7 @@ class Grid:
             AoA[idx, 0: len(LoL[idx])] = LoL[idx]
         return AoA
 
-    def stack(self, iarray, jarray, varray_list, id, concave_hull=False):
+    def stack(self, iarray, jarray, varray_list, id, concave_hull=False, rm_out=True):
         # coord_array : For latlon, array(n,2). (n,0)->lat (n,1)->lon
         # output coord_array: array(n,2). (n,0) -> x axis (horizontal)
         input_dim = iarray.ndim
@@ -219,12 +219,17 @@ class Grid:
             self.concave_hull.append(self._get_concave_hull_mask(
                 trans_array_ch.astype(np.float64)))
 
-        mask = (trans_array[:, 0] > self.lt_x) & (trans_array[:, 0] < self.rb_x) & (
-            trans_array[:, 1] > self.rb_y) & (trans_array[:, 1] < self.lt_y)
-
-        trans_array2 = trans_array[mask].T
-        index_array2 = index_array[mask].T
-        coord_array2 = coord_array[mask].T
+        if rm_out:
+            mask = (trans_array[:, 0] > self.lt_x) & (trans_array[:, 0] < self.rb_x) & (
+                trans_array[:, 1] > self.rb_y) & (trans_array[:, 1] < self.lt_y)
+            trans_array2 = trans_array[mask].T
+            index_array2 = index_array[mask].T
+            coord_array2 = coord_array[mask].T
+        else:
+            mask = slice(None)
+            trans_array2 = trans_array.T
+            index_array2 = index_array.T
+            coord_array2 = coord_array.T
 
         # trans_array3 = np.empty(trans_array2.shape)
         trans_array2[0, :] = (trans_array2[0, :] - self.lt_x) / self.res
