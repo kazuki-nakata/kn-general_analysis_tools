@@ -3,7 +3,8 @@ import numpy as np
 from ..helpers.misc import import_config
 
 print(os.path.dirname(__file__) + os.sep + "params_physics_aoi.yaml")
-params = import_config(config_path=os.path.dirname(__file__) + os.sep + "params_physics_aoi.yaml")
+params = import_config(config_path=os.path.dirname(
+    __file__) + os.sep + "params_physics_aoi.yaml")
 
 
 def calc_ice_production(hb):
@@ -27,7 +28,8 @@ def calc_vapor_pressure(t, mode=1):  # input temperature (Kelvin)
         ea = 6.11 * 10 ** (7.5 * t / (-35.86 + t + 273.15))
         # ea = 6.1078 * np.exp(17.269 * t / (237.3 + t)) #almost the same as the above fomula
     elif mode == 4:  # LV1990 for any surface?
-        ea = np.where(t > 273.15, np.exp((-6763.6 / t) - 4.9283 * np.log(t) + 54.23), np.exp((-6141.0 / t) + 24.3))
+        ea = np.where(t > 273.15, np.exp((-6763.6 / t) - 4.9283 *
+                      np.log(t) + 54.23), np.exp((-6141.0 / t) + 24.3))
     return ea
 
 
@@ -50,26 +52,31 @@ def calc_swave(al, clo, td2m, jday, lat, hour):
 
     st = hour
     ha = (12.0 - st) * np.pi / 12.0
-    sz = np.sin(rad_la) * np.sin(dec) + np.cos(rad_la) * np.cos(dec) * np.cos(ha)
+    sz = np.sin(rad_la) * np.sin(dec) + \
+        np.cos(rad_la) * np.cos(dec) * np.cos(ha)
     if sz <= 0.0:
         sz = 0.0
-    q1 = np.where(sz < 0, 0, (s * (sz**2)) / ((sz + 2.7) * ev * (1.0e-3) + 1.085 * sz + 0.10))
+    q1 = np.where(sz < 0, 0, (s * (sz**2)) / ((sz + 2.7)
+                  * ev * (1.0e-3) + 1.085 * sz + 0.10))
 
     an = np.angle(np.arcsin(sz))
-    q2 = (1 - al) * q1 * (1 - 0.62 * clo + 0.0019 * an)  # (Andreas and Ackley,1982)
+    # (Andreas and Ackley,1982)
+    q2 = (1 - al) * q1 * (1 - 0.62 * clo + 0.0019 * an)
     return q2
 
 
 def calc_lwave_MC1973(clo, st, t2m, em):  # maykut and churtch 1973 by alaska data
     # --- incoming longwave radiation ---
     ila = (
-        0.7855 * (1.0 + 0.2232 * clo**2.75) * params["general"]["sb_const"] * t2m**4.0
+        0.7855 * (1.0 + 0.2232 * clo**2.75) *
+        params["general"]["sb_const"] * t2m**4.0
     )  # (Maykut and Church, 1973)
     ola = -(em * params["general"]["sb_const"] * st**4)
     return ila, ola
 
 
-def calc_lwave_KA1994(clo, st, t2m, em):  # Koenig-Langlo and Augstein, 1994 by polar region data
+# Koenig-Langlo and Augstein, 1994 by polar region data
+def calc_lwave_KA1994(clo, st, t2m, em):
     ila = (0.765 + 0.22 * clo**3.0) * params["general"]["sb_const"] * t2m**4
     ola = -(em * params["general"]["sb_const"] * st**4)
     return ila, ola
@@ -84,7 +91,8 @@ def calc_lwave_G1998(clo, st, t2m, em):  # Guest（1997）by weddell data
 def calc_lwave_J2006(st, t2m, td2m, em):  # Jun et al. (2006) for arctic
     # ea = (qa * p) / 0.622
     ea = calc_vapor_pressure(td2m, mode=4)
-    eps_a = (0.0003 * (t2m - 273.16) ** 2 - 0.0079 * (t2m - 273.16) + 1.2983) * (ea / t2m) ** (1 / 7)
+    eps_a = (0.0003 * (t2m - 273.16) ** 2 - 0.0079 *
+             (t2m - 273.16) + 1.2983) * (ea / t2m) ** (1 / 7)
     ila = eps_a * params["general"]["sb_const"] * t2m**4
     ola = -(em * params["general"]["sb_const"] * st**4)
     return ila, ola
@@ -92,13 +100,16 @@ def calc_lwave_J2006(st, t2m, td2m, em):  # Jun et al. (2006) for arctic
 
 def calc_transfer_coeffs_K1975(wg, t2m, tsfc):
 
-    params2 = import_config(config_path=os.path.dirname(__file__) + os.sep + "params_heat.yaml")
+    params2 = import_config(config_path=os.path.dirname(
+        __file__) + os.sep + "params_heat.yaml")
     params2 = params2["Kondo1975"]
 
     # --- set PARAMETER ---
     # ---- bulk transfer coefficients ---
-    calc_bulk_cha = lambda wg, p: (p["ah"] + (p["bh"] * (wg ** p["ph"])) + (p["ch"] * ((wg - 8) ** 2))) / 1000.0
-    calc_bulk_cea = lambda wg, p: (p["ae"] + (p["be"] * (wg ** p["pe"])) + (p["ce"] * ((wg - 8) ** 2))) / 1000.0
+    def calc_bulk_cha(wg, p): return (
+        p["ah"] + (p["bh"] * (wg ** p["ph"])) + (p["ch"] * ((wg - 8) ** 2))) / 1000.0
+    def calc_bulk_cea(wg, p): return (
+        p["ae"] + (p["be"] * (wg ** p["pe"])) + (p["ce"] * ((wg - 8) ** 2))) / 1000.0
 
     cha = np.where(
         wg < 2.2,
@@ -112,7 +123,8 @@ def calc_transfer_coeffs_K1975(wg, t2m, tsfc):
                 np.where(
                     (wg >= 8.0) & (wg < 25.0),
                     calc_bulk_cha(wg, params2[3]),
-                    np.where((wg > 25.0) & (wg < 50.0), calc_bulk_cha(wg, params2[4]), np.NaN),
+                    np.where((wg > 25.0) & (wg < 50.0),
+                             calc_bulk_cha(wg, params2[4]), np.NaN),
                 ),
             ),
         ),
@@ -130,7 +142,8 @@ def calc_transfer_coeffs_K1975(wg, t2m, tsfc):
                 np.where(
                     (wg >= 8.0) & (wg < 25.0),
                     calc_bulk_cea(wg, params2[3]),
-                    np.where((wg > 25.0) & (wg < 50.0), calc_bulk_cea(wg, params2[4]), np.NaN),
+                    np.where((wg > 25.0) & (wg < 50.0),
+                             calc_bulk_cea(wg, params2[4]), np.NaN),
                 ),
             ),
         ),
@@ -147,8 +160,10 @@ def calc_transfer_coeffs_K1975(wg, t2m, tsfc):
         cha,  # 中立
         np.where(
             dtsfc > 0,
-            cha * (1.0 + 0.63 * np.sqrt(np.abs(s))),  # 不安定。np.absはwarning出力を抑えるため。
-            np.where((s > -3.3) & (s < 0.0), cha * (0.1 + 0.03 * s + 0.9 * np.exp(4.8 * s)), 0),
+            # 不安定。np.absはwarning出力を抑えるため。
+            cha * (1.0 + 0.63 * np.sqrt(np.abs(s))),
+            np.where((s > -3.3) & (s < 0.0), cha * \
+                     (0.1 + 0.03 * s + 0.9 * np.exp(4.8 * s)), 0),
         ),
     )  # 安定
 
@@ -158,7 +173,8 @@ def calc_transfer_coeffs_K1975(wg, t2m, tsfc):
         np.where(
             dtsfc > 0,
             cea * (1.0 + 0.63 * np.sqrt(np.abs(s))),  # 不安定
-            np.where((s > -3.3) & (s < 0.0), cea * (0.1 + 0.03 * s + 0.9 * np.exp(4.8 * s)), 0),
+            np.where((s > -3.3) & (s < 0.0), cea * \
+                     (0.1 + 0.03 * s + 0.9 * np.exp(4.8 * s)), 0),
         ),
     )  # 安定
 
@@ -232,7 +248,7 @@ def calc_thermal_ice_properties(slp, t2m, td2m, w10m, ic, cl, tw, lat, jday, hou
 
     tb = 273.15 - 1.86
     ice_th = convert_thermal_ice_thickness(hb_all, ti, hs, tb)
-    
+
     if test:
         hbi_list = [sw_ice, ilw_ice, olw_ice, sh_ice, lh_ice]
         hbw_list = [sw_water, ilw_water, olw_water, sh_water, lh_water]
