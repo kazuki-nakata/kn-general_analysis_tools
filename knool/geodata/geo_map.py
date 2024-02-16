@@ -289,6 +289,7 @@ class Grid:
 
     def get_image(self, var_name, id=0, interp="nearest", mode=1, param=1):
         """
+        Currently, this method is worked only in id = concave_hull index.
         mode 1 -> kdtree mask, param = distance (float, unit: cell num)
         mode 2 -> mask by concave hull numpy array. param is note used in this mode.
         mode 3 -> fast computation for nearest neighbor using fortran library. interp is not used in this mode.

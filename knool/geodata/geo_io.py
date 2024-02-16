@@ -215,7 +215,7 @@ def make_south_nsidc_raster_from_polygon(infile, outfile, width, length, band, f
 
 
 def make_vector_from_geom(geometry, dict=None, epsg=4326, srs=None, outfile="/vsimem/output.shp"):
-
+    """Output ds for input geometry. For saving file, you must close ds by ds=None """
     ext = os.path.splitext(outfile)[::-1][0]
 
     if ext == ".shp":
@@ -252,7 +252,7 @@ def make_vector_from_geom(geometry, dict=None, epsg=4326, srs=None, outfile="/vs
 
 
 def make_vector_from_geomList(geom_list, attr_dict=None, epsg=4326, srs=None, outfile="/vsimem/output.shp"):
-
+    """Output ds for input geometry. For saving file, you must close ds by ds=None """
     ext = os.path.splitext(outfile)[::-1][0]
 
     if ext == ".shp":

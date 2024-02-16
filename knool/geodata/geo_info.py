@@ -227,18 +227,26 @@ def get_local_time_of_day(t_array, lon_array, day, rot_offset=0):
     return ltod
 
 
-def calc_distances(lons1, lats1, lons2, lats2):  # unit:km
-    R = 6373.0
+def calc_distances(lons1, lats1, lons2, lats2, a=6378137.0, b=6356752.314245):  # unit:km
+    # R = 6373.0
     lon1 = np.radians(lons1)
     lat1 = np.radians(lats1)
     lon2 = np.radians(lons2)
     lat2 = np.radians(lats2)
     dlon = lon2 - lon1
     dlat = lat2 - lat1
-    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * \
-        np.cos(lat2) * np.sin(dlon / 2) ** 2
-    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
-    distance = R * c
+    alat = (lat2 + lat1)/2
+    # a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * \
+    #     np.cos(lat2) * np.sin(dlon / 2) ** 2
+    # c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    # distance = R * c
+
+    e2 = (a**2 - b**2) / (a**2)
+    w = np.sqrt(1 - e2 * (np.sin(alat)**2))
+    m = a * (1 - e2) / (w**3)  # 子午線曲率半径
+    n = a / w                         # 卯酉線曲半径
+    distance = np.sqrt((m * dlat)**2 + (n * dlon * np.cos(alat))**2)  # 距離計測
+
     return distance
 
 

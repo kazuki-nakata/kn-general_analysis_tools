@@ -389,7 +389,7 @@ class AMSR2_L2SIC:
         ds = gdal.Open(self.ds.GetSubDatasets()[subdsID][0], gdal.GA_ReadOnly)
         return ds
 
-    def get_sic(self, l1r_overlap=False):
+    def get_sic(self, l1r_overlap=False):  # have a Bug for overlap. Must Change!!!!
         sic = self.get_subds(self.subdsID["Geophysical_Data"]).ReadAsArray()[
             self.clip_array][:, :, 0] * 0.1
         if l1r_overlap:

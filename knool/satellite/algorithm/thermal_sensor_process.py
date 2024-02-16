@@ -1,4 +1,4 @@
-#%%
+# %%
 import numpy as np
 import sys
 import os
@@ -6,11 +6,12 @@ from ...helpers.misc import deco_print_time
 from ...helpers.geometry import map_2D
 import cython
 
-#%%
+# %%
 
 
 @deco_print_time("start", "end")
-def calc_IST_by_split_window(bt1_array, bt2_array, senz_array, param):  # bt1->low, bt2->high, senz->sensor zenith
+# bt1->low, bt2->high, senz->sensor zenith
+def calc_IST_by_split_window(bt1_array, bt2_array, senz_array, param):
 
     get_IST = (
         lambda bt1, bt2, senz, p: p["a"]

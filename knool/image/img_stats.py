@@ -78,3 +78,55 @@ def get_vifp_mscale(ref, dist):
         vifp = 999
 
     return vifp
+
+
+def get_directional_total_spectrum_ratio(ori_img, dist_img, sampling_freq, axis=0):
+    """
+    in the case of all the freq sampling, you can input sampling_freq = np.fft.fftfreq(ori_img.shape[axis], d=1)[:int(ori_img.shape[axis]/2)]
+    """
+    num = ori_img.shape[axis]
+    if axis == 1:
+        ori_img = ori_img.T
+        dist_img = dist_img.T
+
+    ori_img2 = ori_img-np.mean(ori_img, axis=0)
+    dist_img2 = dist_img-np.mean(dist_img, axis=0)
+
+    # 0:y directional spectrums
+    ori_pow = np.abs(np.fft.fft(ori_img2, axis=0)[:int(num/2+1)])**2
+    dist_pow = np.abs(np.fft.fft(dist_img2, axis=0)[
+                      :int(num/2+1)])**2  # 0:y directional spectrums
+
+    ori_pow = np.mean(ori_pow, axis=1)
+    dist_pow = np.mean(dist_pow, axis=1)
+    sampling_freq_num = (sampling_freq*num).astype(np.int32)
+    ori_pow2 = ori_pow[sampling_freq_num]
+    dist_pow2 = dist_pow[sampling_freq_num]
+    ratio = np.sum(dist_pow2)/np.sum(ori_pow2)
+    return ratio
+
+
+def get_directional_distorsion_index(ori_img, dist_img, sampling_freq, axis=0):
+    """
+    in the case of all the freq sampling, you can input sampling_freq = np.fft.fftfreq(ori_img.shape[axis], d=1)[:int(ori_img.shape[axis]/2)]
+    """
+    num = ori_img.shape[axis]
+    if axis == 1:
+        ori_img = ori_img.T
+        dist_img = dist_img.T
+
+    ori_img2 = ori_img-np.mean(ori_img, axis=0)
+    dist_img2 = dist_img-np.mean(dist_img, axis=0)
+
+    # 0:y directional spectrums
+    ori_pow = np.abs(np.fft.fft(ori_img2, axis=0)[:int(num/2+1)])**2
+    dist_pow = np.abs(np.fft.fft(dist_img2, axis=0)[
+                      :int(num/2+1)])**2  # 0:y directional spectrums
+
+    ori_pow = np.mean(ori_pow, axis=1)
+    dist_pow = np.mean(dist_pow, axis=1)
+    sampling_freq_num = (sampling_freq*num).astype(np.int32)
+    ori_pow2 = ori_pow[sampling_freq_num]
+    dist_pow2 = dist_pow[sampling_freq_num]
+    di = 1-np.sum(np.abs(ori_pow2-dist_pow2)/ori_pow2)/sampling_freq.shape[0]
+    return di
