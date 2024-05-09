@@ -234,6 +234,8 @@ def calc_distances(lons1, lats1, lons2, lats2, a=6378137.0, b=6356752.314245):  
     lon2 = np.radians(lons2)
     lat2 = np.radians(lats2)
     dlon = lon2 - lon1
+    dlon = np.where(dlon > np.pi, dlon-2*np.pi,
+                    np.where(dlon < -np.pi, dlon+2*np.pi, dlon))
     dlat = lat2 - lat1
     alat = (lat2 + lat1)/2
     # a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * \
@@ -348,6 +350,11 @@ def transform_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, sx, sy, sz):
     else:
         proc = 1
 
+    if (proc == 1) & (type(x0).__module__ != "numpy"):
+        proc = 3
+    elif (proc == 1) & (len(x0.shape) == 0):
+        proc = 3
+
     lat = np.float64(np.radians(lat0))
     lon = np.float64(np.radians(lon0))
     xyz0 = np.array([x0, y0, z0])
@@ -364,8 +371,11 @@ def transform_enu_to_ecef(x0, y0, z0, lat0, lon0, h0, sx, sy, sz):
 
     if proc == 1:
         sx, sy, sz = np.einsum("jik,ik->jk", R, xyz) + xyz0
-    else:
+    elif proc == 2:
         sx, sy, sz = R.dot(xyz) + xyz0
+    else:
+        sx, sy, sz = np.einsum("ji,ik->jk", R, xyz) + \
+            np.array([xyz0 for i in range(sx.shape[0])]).T
 
     return sx, sy, sz
 

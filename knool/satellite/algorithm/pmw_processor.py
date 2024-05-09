@@ -10,6 +10,7 @@ from ...fortlib import sensor_geometry as sg
 from ...geodata import geo_map
 from osgeo import osr
 from ...image import img_destripe
+import matplotlib.pyplot as plt
 
 
 def calc_TBD_TBU_Tau(wv, ts, clw, eaz, freq_list=["6.9GHz", "18.7GHz", "23.8GHz", "36.5GHz", "89.0GHz"]):
@@ -78,16 +79,25 @@ def get_antenna_pattern_bessel_beam(fwhm_x, fwhm_y, x_array, y_array, offset_x=0
 
 
 def antenna_pattern_integration(integ_time, integ_interval, antenna_func, func_args, rot_velo=40.0):
-
+    '''
+    integ_time,integ_interval: mili second
+    rot_velo: rpm (the number of rotation/minute)
+    This method approximately calculates effective antenna pattern on azimuth and elevation angle plane.
+    Although it is correct to integrate each antenna pattern on earth surface, this process is computationally expensive.
+    '''
     itime_list = np.arange(-integ_time / 2, integ_time / 2 +
                            integ_interval, integ_interval) * 10 ** (-3)  # second
     r = rot_velo * 2 * np.pi / 60  # radian/s
     ap = 0
+    v1 = np.array([705, 828.7, 0])
+
     for itime in itime_list:
-        offset_x = r * itime * 180 / 3.14
-        az = np.arange(-3, 3, 0.01)
-        el = np.arange(-3, 3, 0.01)
-        X, Y = np.meshgrid(az, el)
+        rad1 = r * itime
+        v2 = np.array([705, 828.7*np.cos(rad1), -828.7*np.sin(rad1)])
+        offset_x = np.arccos(v1.dot(v2)/np.linalg.norm(v1) /
+                             np.linalg.norm(v2))*180/np.pi
+        if rad1 < 0:
+            offset_x = -offset_x
         ap0 = antenna_func(*func_args, offset_x=offset_x)
         ap = ap + ap0
     ap = ap / np.max(ap)
@@ -97,7 +107,14 @@ def antenna_pattern_integration(integ_time, integ_interval, antenna_func, func_a
 def calc_boresight_basis_vectors(p, s):
     # p: ecef obs. location vector at earth surface
     # s: ecef s/c position vector
-    i, j, k = sg.calc_boresight_basis_vectors(p, s)
+    if len(p.shape) == 1:
+        i, j, k = sg.calc_boresight_basis_vectors(
+            p.reshape([1, 3]), s.reshape([1, 3]))
+        i = i.reshape(-1)
+        j = j.reshape(-1)
+        k = k.reshape(-1)
+    else:
+        i, j, k = sg.calc_boresight_basis_vectors(p, s)
     return i, j, k
 
 
@@ -139,9 +156,21 @@ def run_rSIRvh(grid_x, grid_y, vs, vb, vg, tb, mask, wsize, ap, int_ap, res, fwh
     return output
 
 
-def run_rSIR_SS(grid_x, grid_y, grid_id, vs, vb, vg, tbv, mask, id1, id2, wsize, ap, int_ap, res, fwhm, iterate):
-    output = fpmw.rsir2(grid_x, grid_y, grid_id, vs, vb, vg, tbv,
+def run_rSIR_SS(grid_x, grid_y, grid_id, vs, vb, vg, tb, mask, id1, id2, wsize, ap, int_ap, res, fwhm, iterate):
+    output = fpmw.rsir2(grid_x, grid_y, grid_id, vs, vb, vg, tb,
                         mask, id1, id2, wsize, ap, int_ap, res, fwhm, iterate)
+    return output
+
+
+def run_rSIR_fast(grid_x, grid_y, grid_id, ps_angle, ps_scale, tb, mask, id1, id2, wsize, ap, int_ap, res, fwhm, iterate):
+    output = fpmw.rsir2_vh_fast(grid_x, grid_y, grid_id, ps_angle, ps_scale, tb,
+                                mask, id1, id2, wsize, ap, int_ap, res, fwhm, iterate)
+    return output
+
+
+def run_MART_fast(grid_x, grid_y, grid_id, ps_angle, ps_scale, tb, mask, id1, id2, wsize, ap, int_ap, res, fwhm, iterate):
+    output = fpmw.mart_vh_fast(grid_x, grid_y, grid_id, ps_angle, ps_scale, tb,
+                               mask, id1, id2, wsize, ap, int_ap, res, fwhm, iterate)
     return output
 
 
@@ -155,7 +184,7 @@ def run_re_iteration_l1b(grid_x, grid_y, vs, vb, vg, tbv, mask, init, wsize, ap,
     return output
 
 
-def interpolation(latb, lonb, imgb, imgb_ij, lata, lona, sp, imga_ij, ap, offset, range_x=5, range_y=5):
+def interpolation(latb, lonb, imgb, imgb_ij, lata, lona, sp, imga_ij, ap, offset):
     """For How To Use, Prease refer to the explanation of 89GHz interpolation method"""
     # 初期化
     n_proc = 15
@@ -163,32 +192,22 @@ def interpolation(latb, lonb, imgb, imgb_ij, lata, lona, sp, imga_ij, ap, offset
     imgb_ny = latb.shape[1]
     imgb_a = np.zeros(lata.shape)
 
-    # インデックスカーネルの作成
-    cols = np.arange(-range_y, range_y)
-    rows = np.arange(-range_x, range_x)
-    index_i, index_j = np.meshgrid(cols, rows)
-    index_ij = np.array(
-        [[index_i.reshape(-1), index_j.reshape(-1)]]).astype(np.int32)
-    length = imga_ij.shape[1]
-
     # メモリの関係上、分割して計算した方が早い。amsr_ij->amsr_ij2, modis_ij->modis_ij2 (分割前->分割後)
     length = imga_ij.shape[1]
     range_list = np.linspace(0, length, n_proc).astype(np.int32)
 
-    for j in range(range_list.shape[0]-1):
-        findex = range_list[j]
-        lindex = range_list[j+1]
-        imga_ij2 = imga_ij[:, findex:lindex]
-        imgb_ij02 = imgb_ij[:, findex:lindex]
-
-        imgb_ij2 = imgb_ij02+index_ij.T
-        imgb_ij2 = imgb_ij2.transpose(2, 0, 1)
+    for jj in range(range_list.shape[0]-1):
+        findex = range_list[jj]
+        lindex = range_list[jj+1]
+        imga_ij2 = imga_ij[:, findex:lindex]  # 2d array
+        imgb_ij2 = imgb_ij[:, :, findex:lindex]  # 3d array
+        imgb_ij2 = imgb_ij2.transpose(2, 1, 0)
         n_imgb, n_kernel, _ = imgb_ij2.shape
         imgb_ij2 = imgb_ij2.reshape(n_imgb*n_kernel, 2)
 
         # modis_index2が配列ドメイン内という条件で、modis_index2上のマスクインデックスを取得
-        mask_index = np.where((imgb_ij2[:, 0] > 0) & (imgb_ij2[:, 0] < imgb_nx) & (
-            imgb_ij2[:, 1] > 0) & (imgb_ij2[:, 1] < imgb_ny))
+        mask_index = np.where((imgb_ij2[:, 0] >= 0) & (imgb_ij2[:, 0] < imgb_nx) & (
+            imgb_ij2[:, 1] >= 0) & (imgb_ij2[:, 1] < imgb_ny))
 
         # マスクインデックス、modis_index,amsr_indexを使って各緯度経度値を取得
         imgb_ij3 = imgb_ij2[mask_index]
@@ -198,15 +217,16 @@ def interpolation(latb, lonb, imgb, imgb_ij, lata, lona, sp, imga_ij, ap, offset
         lon_imga = lona[imga_ij2[0], imga_ij2[1]]
         lat_imga = lata[imga_ij2[0], imga_ij2[1]]
         sp_imga = sp[:, imga_ij2[0], imga_ij2[1]]
-        lon_imga = np.tile(lon_imga, (range_x*range_y*4, 1)
+
+        lon_imga = np.tile(lon_imga, (n_kernel, 1)
                            ).T.reshape(-1)[mask_index]
-        lat_imga = np.tile(lat_imga, (range_x*range_y*4, 1)
+        lat_imga = np.tile(lat_imga, (n_kernel, 1)
                            ).T.reshape(-1)[mask_index]
-        x_imga = np.tile(sp_imga[0], (range_x*range_y*4, 1)
+        x_imga = np.tile(sp_imga[0], (n_kernel, 1)
                          ).T.reshape(-1)[mask_index]
-        y_imga = np.tile(sp_imga[1], (range_x*range_y*4, 1)
+        y_imga = np.tile(sp_imga[1], (n_kernel, 1)
                          ).T.reshape(-1)[mask_index]
-        z_imga = np.tile(sp_imga[2], (range_x*range_y*4, 1)
+        z_imga = np.tile(sp_imga[2], (n_kernel, 1)
                          ).T.reshape(-1)[mask_index]
         sp_imga = np.array([x_imga, y_imga, z_imga]).T
 
@@ -215,13 +235,12 @@ def interpolation(latb, lonb, imgb, imgb_ij, lata, lona, sp, imga_ij, ap, offset
         i, j, k = calc_boresight_basis_vectors(p0, sp_imga)
 
         p = np.array(geo_info.transform_lla_to_ecef(lat_imgb, lon_imgb, 0)).T
-        # print(p.shape,i.shape,j.shape,k.shape,b.shape,p0.shape)
         az, el = calc_local_az_el_angle(i, j, k, b, p0, p)
         az = np.int32(az*180/np.pi*100+offset)
         el = np.int32(el*180/np.pi*100+offset)
         coef_array0 = ap[el, az]
 
-        # 結果をn_modis*n_kernelの配列を作成し、算出された係数を代入。その後、3次元に戻す。
+        # n_imgb*n_kernelの配列を作成し、算出された係数を代入。その後、3次元に戻す。
         coef_array = np.full(n_imgb*n_kernel, np.NaN)
         coef_array[mask_index] = coef_array0
         coef_array = coef_array.reshape(n_imgb, n_kernel)
@@ -238,9 +257,10 @@ def interpolation(latb, lonb, imgb, imgb_ij, lata, lona, sp, imga_ij, ap, offset
     return imgb_a
 
 
-def interpolation_89G_AB(latb, lonb, tbb, lata, lona, spa, epsg, range_x=3, range_y=3, res=12000):
+def interpolation_89G_AB0(latb, lonb, tbb, lata, lona, spa, epsg, range_x=3, range_y=3, res=12000):
     """
-    For polar region input epsg is 3413:arctic, 3976:antarctic
+    will be remove.
+    For polar region, input epsg is set to 3413:arctic, 3976:antarctic
     coord index calculated from the identified epsg is only used for finding a neighborhood pixel.
     """
     # -------------get antenna pattern--------
@@ -264,16 +284,66 @@ def interpolation_89G_AB(latb, lonb, tbb, lata, lona, spa, epsg, range_x=3, rang
     source.ImportFromEPSG(4326)
     target = osr.SpatialReference()
     target.ImportFromEPSG(epsg)  # 3411:arctic, 3412:antarctic
-    proj = geo_map.Search(source, target, latb, lonb, res)
+    proj = geo_map._Search_pre(source, target, latb, lonb, res)
     imgb_ij, imga_ij = proj.search_index(source, lata, lona)
     tbb2 = interpolation(latb, lonb, tbb, imgb_ij, lata,
                          lona, spa, imga_ij, ap, offset, range_x, range_y)
     return tbb2
 
 
+def interpolation_89G_AB(latb, lonb, tbb, lata, lona, spa, orb, orb_i, orb_p, ecl, res=10000, num_order=10):
+    """
+    For polar region, input epsg is set to 3413:arctic, 3976:antarctic
+    coord index calculated from the identified epsg is only used for finding a neighborhood pixel.
+    """
+    # -------------get antenna pattern--------
+    # 89GHz
+    int_ap = 0.01
+    integ_time = 1.3
+    ifov_angle = 0.15
+    antenna_func = get_antenna_pattern_gaussian_beam
+    radius = 5
+    # antenna_func=kpmw.get_antenna_pattern_bessel_beam
+    az = np.arange(-radius, radius+int_ap, int_ap)
+    el = np.arange(-radius, radius+int_ap, int_ap)
+    X, Y = np.meshgrid(az, el)
+    func_args = [ifov_angle, ifov_angle, X, Y]
+    ap = antenna_pattern_integration(
+        integ_time, 0.1, antenna_func, func_args)
+    offset = radius/int_ap
+
+    # ---------projection-----------
+    # set transform
+    dorb_i = 0  # 7.5
+    dasc_lon = (2.5+98.8/2)/60/24*360-180
+    orb_i = float(orb_i[0:6])+dorb_i
+    orb_p = float(orb_p[0:4])/60/24  # [days]
+    ecl = float(ecl)+dasc_lon
+    source = osr.SpatialReference()
+    source.ImportFromEPSG(4326)
+    target = osr.SpatialReference()
+    target_proj4 = geo_info.get_space_oblique_mercator_proj4(
+        inc_angle=orb_i, ps_rev=orb_p, asc_lon=ecl, false_e=0, false_n=0)
+    target.ImportFromProj4(target_proj4)
+
+    if orb == "A":
+        proj = geo_map.Search(source, target, -latb, lonb, res=res)
+        imgb_ij, imga_ij = proj.search_index(
+            source, -lata, lona, 40000, num_order=num_order)
+    else:
+        proj = geo_map.Search(source, target, latb, lonb, res=res)
+        imgb_ij, imga_ij = proj.search_index(
+            source, lata, lona, 40000, num_order=num_order)
+
+    tbb2 = interpolation(latb, lonb, tbb, imgb_ij, lata,
+                         lona, spa, imga_ij, ap, offset)
+    return tbb2
+
+
 def destriping_amsr2_89GHz(tba, lata, lona, tbb, latb, lonb, spa2, spb2, lata2, lona2, latb2, lonb2,
                            iter_n=250, param1=0.05, m_stop=6, m_stop2=5, xcut=10, epsg=3976):
     '''
+    will be removed
     lata2, lona2, spa2 correspond to the matrixes of y-directional intermediate position for lata, lona2, spa2.
     intermediate positions are derived from _get_AMSR2_intermediate_positions.
     '''
@@ -311,6 +381,7 @@ def destriping_amsr2_89GHz(tba, lata, lona, tbb, latb, lonb, spa2, spb2, lata2, 
 def destriping2_amsr2_89GHz(tba, lata, lona, tbb, latb, lonb, spa2, spb2, lata2, lona2, latb2, lonb2,
                             iter_n=250, param1=0.05, m_stop2=5, xcut=10, epsg=3976):
     '''
+    will be removed
     lata2, lona2, spa2 correspond to the matrixes of y-directional intermediate position for lata, lona2, spa2.
     intermediate positions are derived from _get_AMSR2_intermediate_positions.
     '''
@@ -344,7 +415,7 @@ def destriping2_amsr2_89GHz(tba, lata, lona, tbb, latb, lonb, spa2, spb2, lata2,
 
 
 def destriping3_amsr2_89GHz(tba, lata, lona, tbb, latb, lonb, spa2, spb2, lata2, lona2, latb2, lonb2,
-                            iter_n=250, param1=0.05, m_stop=3, m_stop2=3, gain=0.25, xcut=10, epsg=3976):
+                            orb, orb_i, orb_p, ecl, iter_n=250, param1=0.05, m_stop=3, m_stop2=3, gain=0.25, xcut=10, num_order=10):
     '''
     lata2, lona2, spa2 correspond to the matrixes of y-directional intermediate position for lata, lona2, spa2.
     intermediate positions are derived from _get_AMSR2_intermediate_positions.
@@ -355,8 +426,10 @@ def destriping3_amsr2_89GHz(tba, lata, lona, tbb, latb, lonb, spa2, spb2, lata2,
     ub0, param2b = img_destripe.proc_bouali_destriping(
         tbb, iter_n, param1, m_stop, gain)
     # --------interpolation into A-horn grid--------------------------
-    tba2 = interpolation_89G_AB(lata, lona, ua0, latb2, lonb2, spb2, epsg=epsg)
-    tbb2 = interpolation_89G_AB(latb, lonb, ub0, lata2, lona2, spa2, epsg=epsg)
+    tba2 = interpolation_89G_AB(
+        lata, lona, ua0, latb2, lonb2, spb2, orb, orb_i, orb_p, ecl, num_order=num_order)
+    tbb2 = interpolation_89G_AB(
+        latb, lonb, ub0, lata2, lona2, spa2, orb, orb_i, orb_p, ecl, num_order=num_order)
     # ----------destriping for A-horn------------------
     length = tba.shape[0]+tbb2.shape[0]
     width = tba.shape[1]
@@ -364,6 +437,15 @@ def destriping3_amsr2_89GHz(tba, lata, lona, tbb, latb, lonb, spa2, spb2, lata2,
     tba3[::2, :] = ua0
     tba3[1::2, :] = tbb2
     tba3 = tba3[:, xcut:-xcut]
+    # plt.imshow(ua0)
+    # plt.show()
+    # plt.imshow(ub0)
+    # plt.show()
+    # plt.imshow(tba2)
+    # plt.show()
+    # plt.imshow(tbb2)
+    # plt.show()
+
     ua0, _ = img_destripe.proc_bouali_destriping(
         tba3, iter_n, param1, m_stop2, gain)
     ua0 = ua0[0::2, :]
@@ -382,16 +464,12 @@ def destriping3_amsr2_89GHz(tba, lata, lona, tbb, latb, lonb, spa2, spb2, lata2,
     return ua, ub
 
 
-def _get_AMSR2_intermediate_positions(lat, lon, orb, region, orb_i, orb_p, ecl):
-    dorb_i = 7.5
+def _get_AMSR2_intermediate_positions(lat, lon, orb, orb_i, orb_p, ecl):
+    dorb_i = 0  # 7.5
+    dasc_lon = (2.5+98.8/2)/60/24*360-180
 
-    if orb == "D":
-        dasc_lon = 0.8+180+12.25
-    elif orb == "A":
-        if region == "S":
-            dasc_lon = 0.8+25
-        elif region == "N":
-            dasc_lon = 0.8
+    if orb == "A":
+        lat = -lat
 
     orb_i = float(orb_i[0:6])+dorb_i
     orb_p = float(orb_p[0:4])/60/24  # [days]
@@ -415,4 +493,8 @@ def _get_AMSR2_intermediate_positions(lat, lon, orb, region, orb_i, orb_p, ecl):
     coord = np.array(coord_itransform.TransformPoints(coord))[:, 0:2]
     lat2 = coord[:, 0].reshape(coord3_x.shape)
     lon2 = coord[:, 1].reshape(coord3_x.shape)
+
+    if orb == "A":
+        lat2 = -lat2
+
     return lat2, lon2

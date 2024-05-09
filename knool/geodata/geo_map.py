@@ -11,6 +11,104 @@ from ..fortlib import grid_data
 
 
 class Search:
+    """
+    本クラスは画素値は入力として与えない。最初に画像Aの各ピクセルの座標値を入力する。
+    指定したSRS・解像度のグリッドセルに対応する画像Aのピクセルインデックスが割り当てられる。
+    search_indexに座標値を入力すると、近しい画像Aのピクセルインデックスを高速で取得することができる。
+    transform_indexモードでは、指定した座標系のグリッドのインデックスが出力される。
+    num_orderは近しいポイントの数。
+    thres_distは単位は投影座標における距離で、num_orderで抽出された点のうちthres_distの距離外の
+    場合は、その点の座標値は-1となる。
+    """
+
+    def __init__(self, source_ref, target_ref, iarray, jarray, res):
+        # source_ref and target_ref: ref=osr.SpatialReference() -> ref.ImportFromEPSG(epsg)
+        self.target_ref = target_ref
+        self.res = res
+        self.build(source_ref, target_ref, iarray, jarray, res)
+
+    def _2Dcoord_to_1Dcoord_and_1Dindex(self, iarray, jarray):
+        # for latlon, iarray:lat,jarray:lon
+        coord = np.array([iarray.reshape(-1), jarray.reshape(-1)]).T
+        length = iarray.shape[0]
+        width = jarray.shape[1]
+        index_i, index_j = np.meshgrid(
+            np.arange(0, length), np.arange(0, width))
+        index = np.array([index_i.T.reshape(-1), index_j.T.reshape(-1)])
+        return coord, index
+
+    def build(self, source_ref, target_ref, iarray, jarray, res):
+        # coord_array : For latlon, array(n,2). (n,0)->lat (n,1)->lon
+        # output trans_array: array(n,2). (n,0) -> x axis (horizontal)
+        coord_array, index_array = self._2Dcoord_to_1Dcoord_and_1Dindex(
+            iarray, jarray)
+
+        coord_transform = osr.CoordinateTransformation(source_ref, target_ref)
+        self.trans_array = np.array(
+            coord_transform.TransformPoints(coord_array))[:, 0:2]
+        self.trans_array = self.trans_array / res
+
+        imin = np.min(self.trans_array[:, 0])
+        imax = np.max(self.trans_array[:, 0])
+        jmin = np.min(self.trans_array[:, 1])
+        jmax = np.max(self.trans_array[:, 1])
+        self.nx = int(imax-imin) + 1
+        self.ny = int(jmax-jmin) + 1
+        self.offset_i = imin
+        self.offset_j = jmin
+        # ------i -> horizon
+        self.trans_array[:, 0] = self.trans_array[:, 0] - self.offset_i
+        self.trans_array[:, 1] = self.trans_array[:, 1] - self.offset_j
+        self.index_array = index_array.T
+        self.tree = KDTree(self.trans_array)
+
+    def search_index(self, source_ref, iarray, jarray, thres_dist, num_order=1, mode="original_index"):
+        # coord_array : For latlon, array(n,2). (n,0)->lat (n,1)->lon
+        # output coord_array: array(n,2). (n,0) -> x axis (horizontal)
+
+        coord_array, index_array = self._2Dcoord_to_1Dcoord_and_1Dindex(
+            iarray, jarray)
+        index_array = index_array.T
+
+        coord_transform = osr.CoordinateTransformation(
+            source_ref, self.target_ref)
+        trans_array = np.array(
+            coord_transform.TransformPoints(coord_array))[:, 0:2]
+        trans_array = trans_array / self.res
+        trans_array[:, 0] = trans_array[:, 0] - self.offset_i
+        trans_array[:, 1] = trans_array[:, 1] - self.offset_j
+
+        if mode == "original_index":
+            trans_array2 = trans_array
+            index_array2 = index_array
+        else:
+            trans_array2 = trans_array[
+                (trans_array[:, 0] >= 0)
+                & (trans_array[:, 0] < self.nx)
+                & (trans_array[:, 1] >= 0)
+                & (trans_array[:, 1] < self.ny)
+            ]
+            index_array2 = index_array[
+                (trans_array[:, 0] >= 0)
+                & (trans_array[:, 0] < self.nx)
+                & (trans_array[:, 1] >= 0)
+                & (trans_array[:, 1] < self.ny)
+            ]
+
+        dist, index = self.tree.query(trans_array2, k=num_order)
+
+        if mode == "original_index":
+            out_ij = np.int32(self.index_array[index])
+        elif mode == "transform_index":
+            out_ij = np.int32(self.trans_array[index])
+
+        adist = (thres_dist)/self.res
+        out_ij = np.where(dist.T > adist, -1, out_ij.T)
+        return out_ij, index_array2.T
+
+
+class _Search_pre:
+    # 削除予定
     # 本クラスは画素値は入力として与えない。最初に画像Aの各ピクセルの座標値を入力する。
     # その後、指定したSRS・解像度のグリッドセルに対応する画像Aのピクセルインデックスが割り当てられる。
     # search_indexに座標値を入力すると、画像Aのピクセルインデックスを高速で取得することができる。
@@ -81,15 +179,15 @@ class Search:
         trans_array[:, 1] = trans_array[:, 1] - self.offset_j
 
         trans_array2 = trans_array[
-            (trans_array[:, 0] > 0)
+            (trans_array[:, 0] >= 0)
             & (trans_array[:, 0] < self.nx)
-            & (trans_array[:, 1] > 0)
+            & (trans_array[:, 1] >= 0)
             & (trans_array[:, 1] < self.ny)
         ].T
         index_array2 = index_array[
-            (trans_array[:, 0] > 0)
+            (trans_array[:, 0] >= 0)
             & (trans_array[:, 0] < self.nx)
-            & (trans_array[:, 1] > 0)
+            & (trans_array[:, 1] >= 0)
             & (trans_array[:, 1] < self.ny)
         ].T
         #        out_ij = np.array([self.map_field_i[trans_array2.tolist()], self.map_field_j[trans_array2.tolist()]])

@@ -175,6 +175,7 @@ class AMSR2_L1B:
         return nav
 
     def get_satellite_position(self):
+        """格納されている位置データはスキャン開始時刻のもの。それをスキャン方向に内挿するメソッド。"""
         sp0 = self.get_subds(self.subdsID["Navigation_Data"]).ReadAsArray()[
             self.clip_array, 0:3]
         sp0 = np.append(sp0, np.array([(sp0[-1] - sp0[-2]) + sp0[-1]]), axis=0)
@@ -208,7 +209,7 @@ class AMSR2_L1B:
         return eaz
 
     def get_land_ocean_flag(self, freq="36G"):
-        num = {"6G": 0, "10G": 1, "18G": 2, "36G": 3}
+        num = {"6G": 0, "7G": 1, "10G": 2, "18G": 3, "23G": 4, "36G": 5}
         loflag = self.get_subds(self.subdsID["Land_Ocean_Flag_6_to_36"]).ReadAsArray()[
             num[freq]][self.clip_array]
         self.output = loflag

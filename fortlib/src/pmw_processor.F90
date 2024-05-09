@@ -464,7 +464,7 @@ do l = 1, n_grid
     i = nint(grid_x(l))
     j = nint(grid_y(l))
     k = grid_id(l)
-    if((id1_grid(i,j).eq.k).or.(id2_grid(i,j).eq.k)) then
+    if((id1_grid(i,j).ge.k).and.(id2_grid(i,j).le.k)) then
     if(mask_grid(i,j).eq.999) cycle
       pindex(l)=findex(i,j)
       uindex(l)=1
@@ -571,51 +571,6 @@ do l = 1, n_grid
     fi(l)=fi(l)/asum
 enddo
 
-
-!------------------test----------------------
-! out_var(:,:)=0
-! out_time(:,:)=0
-
-! do j =1,ny
-!   do i =1,nx
-!     isum=0
-!     asum=0
-
-!     if(mask(i,j).eq.999) cycle
-    
-!     do jj =1,wsize
-!       do ii =1,wsize
-!         i2=i+ii-(wsize+1)/2
-!         j2=j+jj-(wsize+1)/2
-!         if((i2.lt.1).or.(i2.gt.nx)) cycle
-!         if((j2.lt.1).or.(j2.gt.ny)) cycle
-!         p=findex(i2,j2)
-!         if(p.eq.-1) cycle
-!         do while (p>0)
-!           dist=sqrt((real(i)-grid_x(p))**2+(real(j)-grid_y(p))**2)*res
-!           if (dist.le.window_radius) then
-!             fr=exp(-dist**2./(sigma**2))
-!             asum=asum+fr
-!             isum=isum+1
-!             out_var(i,j)=fr*fi(p)+out_var(i,j)
-!             out_time(i,j)=fr*time(p)+out_time(i,j)
-!           endif
-!             p=pindex(p)
-!         enddo
-!       enddo
-!     enddo
-
-!     if(isum.lt.4) then
-!       out_var(i,j)=9.9E33
-!       out_time(i,j)=9.9E33
-!     else
-!       out_var(i,j)=out_var(i,j)/asum
-!       out_time(i,j)=out_time(i,j)/asum
-!     endif
-!  enddo
-! enddo
-!------------------------------kokomade-----------------------
-
 pj_new(:,:)=9.9E33
 do j = 1, ny
   do i = 1, nx
@@ -663,6 +618,341 @@ enddo
 
 END SUBROUTINE rSIR2
 
+SUBROUTINE rSIR2_vh_fast(grid_x,grid_y,grid_id,ps_angle,ps_scale,var,mask_grid,id1_grid,id2_grid,out_var,&
+n_grid,nx,ny,nz,wsize,ap,nx_ap,ny_ap,int_ap,res,fwhm,iterate)
+IMPLICIT NONE
+INTEGER :: i,ii,j,jj,k,kk,l,grid_i,grid_j,isum
+INTEGER :: i2,j2,i3,j3,p,dum
+REAL :: x2,y2,dx,dy
+INTEGER(4),INTENT(IN) :: n_grid,nx,ny,nz,wsize,nx_ap,ny_ap,iterate
+! INTEGER(4),INTENT(IN) :: i_t,j_t
+REAL(4),INTENT(IN) :: int_ap,res,fwhm
+INTEGER(4),INTENT(IN),DIMENSION(1:nx,1:ny) :: mask_grid,id1_grid,id2_grid
+REAL(4),INTENT(IN),DIMENSION(1:n_grid)  :: grid_x, grid_y, grid_id,ps_angle,ps_scale
+REAL(4),INTENT(IN),DIMENSION(1:n_grid, nz)  :: var
+REAL(4),DIMENSION(nx,ny,nz) :: pj_new
+REAL(4),DIMENSION(n_grid,nz) :: fi 
+REAL(4),DIMENSION(nx_ap,ny_ap) :: ap
+INTEGER(4) :: findex(1:nx,1:ny),pindex(1:n_grid),uindex(1:n_grid)
+REAL(4),DIMENSION(nz)  :: di,pj,pj_sim,uij
+REAL(4),INTENT(OUT),DIMENSION(1:nx,1:ny,1:nz):: out_var
+
+REAL(4) :: sigma,scale_radius,window_radius,dist,adis
+REAL(8) :: fr,asum,pi
+REAL(8),DIMENSION(nz) :: var_sum
+
+print *, "image nx=",nx,",","ny=",ny
+print *, "antenna pattern nx=",nx_ap,",","ny=",ny_ap
+
+pi=acos(-1.)
+pindex(:)=-1
+findex(:,:)=-1
+uindex(:)=-1
+
+do l = 1, n_grid
+    i = nint(grid_x(l))
+    j = nint(grid_y(l))
+    k = grid_id(l)
+    if((id1_grid(i,j).ge.k).and.(id2_grid(i,j).le.k)) then
+    if(mask_grid(i,j).eq.999) cycle
+      pindex(l)=findex(i,j)
+      uindex(l)=1
+      findex(i,j)=l
+    endif
+enddo
+
+!-------------------get basis vectors-------------------
+scale_radius=fwhm/2
+sigma=scale_radius*(2/2.35482) !2*sqrt(2ln2)=2.35482, sigma=sigma/2 for gaussian beam, fwhm/sqrt(2ln2) / 2
+window_radius=(sigma*8)/2.
+
+!-------------------initialization----------------------
+out_var(:,:,:)=0
+k=0
+! out_test(:,:)=0
+do j =1,ny
+  do i =1,nx
+    var_sum(:)=0
+    asum=0
+    isum=0
+
+    if(mask_grid(i,j).eq.999) cycle
+    do jj =1,wsize
+      do ii =1,wsize
+        i2=i+ii-(wsize+1)/2
+        j2=j+jj-(wsize+1)/2
+        if((i2.lt.1).or.(i2.gt.nx)) cycle
+        if((j2.lt.1).or.(j2.gt.ny)) cycle
+        
+        p=findex(i2,j2)
+
+        if(p.eq.-1) cycle
+        do while (p>0)
+        dx=(grid_x(p)-real(i))*res
+        dy=(grid_y(p)-real(j))*res
+
+        dist=sqrt(dx**2+dy**2)
+        if (dist.le.window_radius) then
+          x2=(-cos(ps_angle(p)) * dy + sin(ps_angle(p)) * dx) * ps_scale(p)
+          y2=(cos(ps_angle(p)) * dx + sin(ps_angle(p)) * dy) * ps_scale(p)
+          fr=ap(nint(x2/int_ap)+(nx_ap-1)/2+1,nint(y2/int_ap)+(ny_ap-1)/2+1)
+          asum=asum+fr
+          isum=isum+1
+          var_sum(:)=fr*var(p,:)+var_sum(:)
+          endif
+          p=pindex(p)
+        enddo
+      enddo
+    enddo
+
+    if(isum.lt.4) then
+      out_var(i,j,:)=Undef
+    else
+      out_var(i,j,:)=var_sum(:)/asum
+    endif
+ enddo
+enddo
+
+
+!------------------rSIR--------------------------------
+
+do k=1,iterate
+
+fi(:,:)=0
+do l = 1, n_grid
+  if(uindex(l).eq.-1) cycle
+    i = nint(grid_x(l))
+    j = nint(grid_y(l))
+
+    asum=0
+
+    do jj =1,wsize
+      do ii =1,wsize
+        i2=i+ii-(wsize+1)/2
+        j2=j+jj-(wsize+1)/2
+        if((i2.lt.1).or.(i2.gt.nx)) cycle
+        if((j2.lt.1).or.(j2.gt.ny)) cycle
+        if(out_var(i2,j2,1).eq.9.9E33) cycle
+          dx=(grid_x(l)-real(i2))*res
+          dy=(grid_y(l)-real(j2))*res
+          dist=sqrt(dx**2+dy**2)
+          if (dist.le.window_radius) then
+            x2=(-cos(ps_angle(l)) * dy + sin(ps_angle(l)) * dx) * ps_scale(l)
+            y2=(cos(ps_angle(l)) * dx + sin(ps_angle(l)) * dy) * ps_scale(l)
+            fr=ap(nint(x2/int_ap)+(nx_ap-1)/2+1,nint(y2/int_ap)+(ny_ap-1)/2+1)
+            asum=asum+fr
+            fi(l,:)=fr*out_var(i2,j2,:)+fi(l,:)
+          endif
+      enddo
+    enddo
+    fi(l,:)=fi(l,:)/asum
+enddo
+
+
+pj_new(:,:,:)=9.9E33
+do j = 1, ny
+  do i = 1, nx
+    if(mask_grid(i,j).eq.999) cycle
+    if(out_var(i,j,1).eq.Undef) cycle
+    pj_sim(:)=0
+    asum=0
+    pj(:)=out_var(i,j,:)
+
+    do jj =1,wsize
+    do ii =1, wsize
+      i2=i+ii-(wsize+1)/2
+      j2=j+jj-(wsize+1)/2
+      if((i2.lt.1).or.(i2.gt.nx)) cycle
+      if((j2.lt.1).or.(j2.gt.ny)) cycle
+        p=findex(i2,j2)
+        if(p.eq.-1) cycle
+        do while (p>0)
+          dx=(grid_x(p)-real(i))*res
+          dy=(grid_y(p)-real(j))*res
+          dist=sqrt(dx**2+dy**2)
+          if (dist.le.window_radius) then
+            di(:)=sqrt(var(p,:)/fi(p,:))
+            do kk=1,nz
+              if(di(kk).ge.1) then
+                uij(kk)=(1-1/di(kk))/2./fi(p,kk)+1/pj(kk)/di(kk)
+                uij(kk)=1/uij(kk)
+              else
+                uij(kk)=(fi(p,kk)/2.)*(1-di(kk))+pj(kk)*di(kk)
+              endif
+            enddo
+            x2=(-cos(ps_angle(p)) * dy + sin(ps_angle(p)) * dx) * ps_scale(p)
+            y2=(cos(ps_angle(p)) * dx + sin(ps_angle(p)) * dy) * ps_scale(p)
+            fr=ap(nint(x2/int_ap)+(nx_ap-1)/2+1,nint(y2/int_ap)+(ny_ap-1)/2+1)
+            asum=asum+fr
+            pj_sim(:)=fr*uij(:)+pj_sim(:)
+          endif
+          p=pindex(p)
+        enddo
+      enddo
+    enddo
+    pj_new(i,j,:)=pj_sim(:)/asum
+enddo
+enddo
+out_var=pj_new
+
+enddo
+
+END SUBROUTINE rSIR2_vh_fast
+
+SUBROUTINE mart_vh_fast(grid_x,grid_y,grid_id,ps_angle,ps_scale,var,mask_grid,id1_grid,id2_grid,out_var,&
+n_grid,nx,ny,nz,wsize,ap,nx_ap,ny_ap,int_ap,res,fwhm,iterate)
+IMPLICIT NONE
+INTEGER :: i,ii,j,jj,k,kk,l,grid_i,grid_j,isum
+INTEGER :: i2,j2,i3,j3,p,dum
+REAL :: x2,y2,dx,dy
+INTEGER(4),INTENT(IN) :: n_grid,nx,ny,nz,wsize,nx_ap,ny_ap,iterate
+! INTEGER(4),INTENT(IN) :: i_t,j_t
+REAL(4),INTENT(IN) :: int_ap,res,fwhm
+INTEGER(4),INTENT(IN),DIMENSION(1:nx,1:ny) :: mask_grid,id1_grid,id2_grid
+REAL(4),INTENT(IN),DIMENSION(1:n_grid)  :: grid_x, grid_y, grid_id,ps_angle,ps_scale
+REAL(4),INTENT(IN),DIMENSION(1:n_grid, nz)  :: var
+REAL(4),DIMENSION(nx,ny,nz) :: pj_new
+REAL(4),DIMENSION(n_grid,nz) :: fi 
+REAL(4),DIMENSION(nx_ap,ny_ap) :: ap
+INTEGER(4) :: findex(1:nx,1:ny),pindex(1:n_grid),uindex(1:n_grid)
+REAL(4),DIMENSION(nz)  :: di,pj,pj_sim,uij
+REAL(4),INTENT(OUT),DIMENSION(1:nx,1:ny,1:nz):: out_var
+
+REAL(4) :: sigma,scale_radius,window_radius,dist,adis
+REAL(8) :: fr,asum,pi
+REAL(8),DIMENSION(nz) :: var_sum
+
+print *, "image nx=",nx,",","ny=",ny
+print *, "antenna pattern nx=",nx_ap,",","ny=",ny_ap
+
+pi=acos(-1.)
+pindex(:)=-1
+findex(:,:)=-1
+uindex(:)=-1
+
+do l = 1, n_grid
+    i = nint(grid_x(l))
+    j = nint(grid_y(l))
+    k = grid_id(l)
+    if((id1_grid(i,j).ge.k).and.(id2_grid(i,j).le.k)) then
+    if(mask_grid(i,j).eq.999) cycle
+      pindex(l)=findex(i,j)
+      uindex(l)=1
+      findex(i,j)=l
+    endif
+enddo
+
+!-------------------get basis vectors-------------------
+scale_radius=fwhm/2
+sigma=scale_radius*(2/2.35482) !2*sqrt(2ln2)=2.35482, sigma=sigma/2 for gaussian beam, fwhm/sqrt(2ln2) / 2
+window_radius=(sigma*8)/2.
+
+!-------------------initialization----------------------
+out_var(:,:,:)=0
+k=0
+! out_test(:,:)=0
+do j =1,ny
+  do i =1,nx
+    var_sum(:)=0
+    asum=0
+    isum=0
+
+    if(mask_grid(i,j).eq.999) cycle
+    do jj =1,wsize
+      do ii =1,wsize
+        i2=i+ii-(wsize+1)/2
+        j2=j+jj-(wsize+1)/2
+        if((i2.lt.1).or.(i2.gt.nx)) cycle
+        if((j2.lt.1).or.(j2.gt.ny)) cycle
+        
+        p=findex(i2,j2)
+
+        if(p.eq.-1) cycle
+        do while (p>0)
+        dx=(grid_x(p)-real(i))*res
+        dy=(grid_y(p)-real(j))*res
+
+        dist=sqrt(dx**2+dy**2)
+        if (dist.le.window_radius) then
+          x2=(-cos(ps_angle(p)) * dy + sin(ps_angle(p)) * dx) * ps_scale(p)
+          y2=(cos(ps_angle(p)) * dx + sin(ps_angle(p)) * dy) * ps_scale(p)
+          fr=ap(nint(x2/int_ap)+(nx_ap-1)/2+1,nint(y2/int_ap)+(ny_ap-1)/2+1)
+          asum=asum+fr
+          isum=isum+1
+          var_sum(:)=fr*var(p,:)+var_sum(:)
+          endif
+          p=pindex(p)
+        enddo
+      enddo
+    enddo
+
+    if(isum.lt.4) then
+      out_var(i,j,:)=Undef
+    else
+      out_var(i,j,:)=var_sum(:)/asum
+    endif
+ enddo
+enddo
+
+
+!------------------rSIR--------------------------------
+
+do k=1,iterate
+
+fi(:,:)=0
+do l = 1, n_grid
+  if(uindex(l).eq.-1) cycle
+    i = nint(grid_x(l))
+    j = nint(grid_y(l))
+
+    asum=0
+
+    do jj =1,wsize
+      do ii =1,wsize
+        i2=i+ii-(wsize+1)/2
+        j2=j+jj-(wsize+1)/2
+        if((i2.lt.1).or.(i2.gt.nx)) cycle
+        if((j2.lt.1).or.(j2.gt.ny)) cycle
+        if(out_var(i2,j2,1).eq.9.9E33) cycle
+          dx=(grid_x(l)-real(i2))*res
+          dy=(grid_y(l)-real(j2))*res
+          dist=sqrt(dx**2+dy**2)
+          if (dist.le.window_radius) then
+            x2=(-cos(ps_angle(l)) * dy + sin(ps_angle(l)) * dx) * ps_scale(l)
+            y2=(cos(ps_angle(l)) * dx + sin(ps_angle(l)) * dy) * ps_scale(l)
+            fr=ap(nint(x2/int_ap)+(nx_ap-1)/2+1,nint(y2/int_ap)+(ny_ap-1)/2+1)
+            asum=asum+fr
+            fi(l,:)=fr*out_var(i2,j2,:)+fi(l,:)
+          endif
+      enddo
+    enddo
+    fi(l,:)=fi(l,:)/asum
+    di(:)=(var(l,:)/fi(l,:))
+
+    do jj =1, wsize
+    do ii =1, wsize
+      i2=i+ii-(wsize+1)/2
+      j2=j+jj-(wsize+1)/2
+      if((i2.lt.1).or.(i2.gt.nx)) cycle
+      if((j2.lt.1).or.(j2.gt.ny)) cycle
+      if(out_var(i2,j2,1).eq.9.9E33) cycle
+        dx=(grid_x(l)-real(i2))*res
+        dy=(grid_y(l)-real(j2))*res
+        dist=sqrt(dx**2+dy**2)
+        if (dist.le.window_radius) then
+          x2=(-cos(ps_angle(l)) * dy + sin(ps_angle(l)) * dx) * ps_scale(l)
+          y2=(cos(ps_angle(l)) * dx + sin(ps_angle(l)) * dy) * ps_scale(l)
+          fr=ap(nint(x2/int_ap)+(nx_ap-1)/2+1,nint(y2/int_ap)+(ny_ap-1)/2+1)
+          out_var(i2,j2,:)=out_var(i2,j2,:)*(di(:)**(fr/2.))
+        endif
+      enddo
+    enddo
+
+enddo
+
+enddo
+
+END SUBROUTINE mart_vh_fast
 
 SUBROUTINE count_rSIR2(grid_x,grid_y,grid_id,mask_grid,id1_grid,id2_grid,out_var,n_grid,nx,ny)
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()

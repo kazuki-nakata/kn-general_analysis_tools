@@ -458,11 +458,11 @@ out_var(:,:)=0
       do ii=1,nx_w
         i2=i+ii-mx-1
         j2=j+jj-my-1
-        asum=fil(ii,jj,i)+asum
+        ! asum=fil(ii,jj,i)+asum
         out_var(i,j)=var2(i2,j2)*fil(ii,jj,i)+out_var(i,j)
       enddo
       enddo
-      out_var(i,j)=out_var(i,j)/asum
+      ! out_var(i,j)=out_var(i,j)/asum
     enddo
     enddo
 
