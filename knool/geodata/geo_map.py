@@ -219,7 +219,8 @@ class Grid:
         self.rb_y = rb_y
         self.lt_x = lt_x
         self.lt_y = lt_y
-        self.colname_list = ["id", "lat", "lon", "grid_x", "grid_y"]
+        self.colname_list = ["id", "i", "j", "grid_x",
+                             "grid_y", "original_i", "original_j"]
         self.colname_list.extend(colname)
         self.df = pd.DataFrame(
             index=[], columns=self.colname_list, dtype="float64")
@@ -336,7 +337,7 @@ class Grid:
         # trans_array3 = np.rint(trans_array2)
         num_array = np.full(coord_array2.shape[1], id).reshape(
             1, coord_array2.shape[1])
-        varray_list2 = [num_array, coord_array2, trans_array2]
+        varray_list2 = [num_array, coord_array2, trans_array2, index_array2]
 
         if input_dim == 2:
             for varray in varray_list:
@@ -398,8 +399,22 @@ class Grid:
         Y = np.linspace(1, ny, ny)
         X, Y = np.meshgrid(X, Y)  # 2D grid for interpolation
         df = self.df[self.df["id"] == id]
-        grid_x = df["grid_x"].values.astype(np.float32) + 0.5
-        grid_y = df["grid_y"].values.astype(np.float32) + 0.5
+
+        grid_x = df["grid_x"].values+0.5
+        grid_y = df["grid_y"].values+0.5
+        coef = 10**(7-len(str(int(np.max(grid_x)))))
+        if coef >= 1:
+            grid_x2 = grid_x.astype(np.float32)
+            grid_x = np.where(
+                grid_x2 == nx+0.5, (grid_x*coef).astype(np.int32)/coef, grid_x)
+        coef = 10**(7-len(str(int(np.max(grid_y)))))
+        if coef >= 1:
+            grid_y2 = grid_y.astype(np.float32)
+            grid_y = np.where(
+                grid_y2 == ny+0.5, (grid_y*coef).astype(np.int32)/coef, grid_y)
+        grid_x = grid_x.astype(np.float32)
+        grid_y = grid_y.astype(np.float32)
+
         grid_z = df[var_name].values.astype(np.float32)
 
         if mode == 1:

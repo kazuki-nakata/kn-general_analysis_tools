@@ -36,8 +36,9 @@ def proc_bouali_destriping(img, iter_n, param1=0.5, n_stop=10, param2="Auto", ga
     """
     Cascade iteration by Bouali (2011) MODIS destriping.
     iter_n and param1 is iteration parameters.
-    base of image quality and its threshold is get_directional_distorsion_index and 0.95, respectively.
+    used image quality and its threshold are get_directional_distorsion_index and 0.95, respectively.
     initial parameter for y-directional TV (param2) is automatically determined by param2=np.mean(np.abs(grad_oa_y))/np.mean(np.abs(grad_oa_x))
+    you can set param as a real value.
     In the case of use of img_quality_method (iqm), you must input iqm_param (arg of iqm) and threshold.
     """
     uk = np.zeros(img.shape)

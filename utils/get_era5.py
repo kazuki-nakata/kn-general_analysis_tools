@@ -4,11 +4,12 @@ import os
 
 c = cdsapi.Client()
 
-year=2020
-while year<=2020:
+year=2023
+while year<=2023:
 
-    month=1
-    while month<=1:
+    month=6
+    lmonth=month
+    while month<=lmonth:
      
         print(str(year),str(month).zfill(2))
         target="era5_"+str(year)+str(month).zfill(2)+".nc"
@@ -27,7 +28,7 @@ while year<=2020:
         print(dlist)
 
         vals=['10m_u_component_of_wind', '10m_v_component_of_wind', '2m_dewpoint_temperature', '2m_temperature', 'mean_sea_level_pressure', 'sea_surface_temperature', 'total_cloud_cover', 'total_column_water_vapour',]
-        #vals=['10m_u_component_of_wind', '10m_v_component_of_wind', '2m_dewpoint_temperature', '2m_temperature', 'mean_sea_level_pressure', 'sea_surface_temperature', 'total_cloud_cover', 'total_column_cloud_liquid_water', 'total_column_water_vapour',]
+        # vals=['10m_u_component_of_wind', '10m_v_component_of_wind', '2m_dewpoint_temperature', '2m_temperature', 'mean_sea_level_pressure', 'sea_surface_temperature', 'total_cloud_cover', 'total_column_cloud_liquid_water', 'total_column_water_vapour',]
         print(vals)
 
         c.retrieve(

@@ -55,10 +55,10 @@ def get_coord_transform_epsg(source_epsg, target_epsg):
     target_ref = osr.SpatialReference()
     source_ref.ImportFromEPSG(source_epsg)
     target_ref.ImportFromEPSG(target_epsg)
-    if source_epsg == 4326:
-        source_ref.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-    if target_epsg == 4326:
-        target_ref.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    # if source_epsg == 4326:
+    #     source_ref.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    # if target_epsg == 4326:
+    #     target_ref.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
     return osr.CoordinateTransformation(source_ref, target_ref)
 
@@ -112,12 +112,20 @@ def get_latlons_from_raster(raster, interval=1):
     return latlon
 
 
-def get_latlonval_vectors(lat_array, lon_array, val_array, mask):
-    cols, rows = lat_array.shape()
-    lat_vector = lat_array.shape(cols * rows)
-    lon_vector = lon_array.shape(cols * rows)
-    val_vector = val_array.shape(cols * rows)
-    return lat_vector, lon_vector, val_vector
+def get_extent_from_latlon(lat, lon, source_epsg, target_epsg):
+    ext = []
+    coord_transform = get_coord_transform_epsg(source_epsg, target_epsg)
+    coord_array = np.array([lat.reshape(-1), lon.reshape(-1)]).T
+    trans_array = np.array(
+        coord_transform.TransformPoints(coord_array))[:, 0:2]
+
+    xmin = np.min(trans_array[:, 0])
+    ymin = np.min(trans_array[:, 1])
+    xmax = np.max(trans_array[:, 0])
+    ymax = np.max(trans_array[:, 1])
+
+    ext = [xmin, ymin, xmax, ymax]
+    return ext
 
 
 def get_raster_extent(raster):
