@@ -55,8 +55,6 @@ def get_coord_transform_epsg(source_epsg, target_epsg):
     target_ref = osr.SpatialReference()
     source_ref.ImportFromEPSG(source_epsg)
     target_ref.ImportFromEPSG(target_epsg)
-    # if source_epsg == 4326:
-    #     source_ref.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
     # if target_epsg == 4326:
     #     target_ref.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
@@ -235,8 +233,8 @@ def get_local_time_of_day(t_array, lon_array, day, rot_offset=0):
     return ltod
 
 
-def calc_distances(lons1, lats1, lons2, lats2, a=6378137.0, b=6356752.314245):  # unit:km
-    # R = 6373.0
+def calc_distances(lons1, lats1, lons2, lats2, a=6378137.0, b=6356752.314245):  # unit:m
+    # R = 6373.0*1000
     lon1 = np.radians(lons1)
     lat1 = np.radians(lats1)
     lon2 = np.radians(lons2)
@@ -462,6 +460,33 @@ def calc_line_buffer_point(lat0, lon0, h0, lat, lon, h, distance, ori="right"):
     lat, lon, h = transform_ecef_to_lla(*buff_ecef, a=R, b=R)
 
     return lat, lon, h
+
+
+def get_pixel_index_from_points(ds, coords, coord_sr, coord_type="EPSG"):
+    # 地理情報を取得
+    geo_transform = ds.GetGeoTransform()
+    proj = ds.GetProjection()
+    source_srs = osr.SpatialReference()
+    if coord_type == "EPSG":
+        source_srs.ImportFromEPSG(coord_sr)  # WGS84
+    elif coord_type == "WKT":
+        source_srs.ImportFromWkt(coord_sr)  # WGS84
+    elif coord_type == "PROJ4":
+        source_srs.ImportFromProj4(coord_sr)  # WGS84
+
+    target_srs = osr.SpatialReference()
+    target_srs.ImportFromWkt(proj)
+    transform = osr.CoordinateTransformation(source_srs, target_srs)
+    coords2 = np.array(transform.TransformPoints(coords))[:, 0:2].T
+
+    px = (coords2[0]+0.5 - geo_transform[0]) / geo_transform[1]
+    py = (coords2[1]+0.5 - geo_transform[3]) / geo_transform[5]
+    idx_arr = np.array([py, px]).astype(np.int32)
+    idx_arr[0] = np.where((idx_arr[0] < 0) | (
+        idx_arr[0] > ds.RasterYSize), np.NaN, idx_arr[0])
+    idx_arr[1] = np.where((idx_arr[1] < 0) | (
+        idx_arr[1] > ds.RasterXSize), np.NaN, idx_arr[1])
+    return idx_arr.T
 
 
 def count_geometry_in_polygon(shape, polygon):

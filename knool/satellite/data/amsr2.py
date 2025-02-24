@@ -81,6 +81,28 @@ class AMSR2_L1B:
                 latA.T, lonA.T, coreg_1, coreg_2)
             lat = lat.T
             lon = lon.T
+
+            # latA=np.radians(latA)#.astype(np.float64))
+            # lonA=np.radians(lonA)#.astype(np.float64))
+            # latA1=latA[:,::2]
+            # latA2=latA[:,1::2]
+            # lonA1=lonA[:,::2]
+            # lonA2=lonA[:,1::2]
+            # p1=np.array([np.cos(lonA1)*np.cos(latA1),np.sin(lonA1)*np.cos(latA1),np.sin(latA1)]).T
+            # p2=np.array([np.cos(lonA2)*np.cos(latA2),np.sin(lonA2)*np.cos(latA2),np.sin(latA2)]).T
+            # ex=p1
+            # theta=np.arccos(np.sum(p1*p2,axis=2)).T
+            # # ezdeno =  np.sqrt(np.sum(p1*p1,axis=2))*np.sqrt(np.sum(p2*p2,axis=2))*np.sin(theta.T)
+            # # eznume=np.cross(p1,p2)
+            # # ez=(eznume.T/ezdeno.T).T
+            # eznume=np.cross(p1,p2)
+            # ezdeno=np.sqrt(np.sum(eznume*eznume,axis=2))
+            # ez=(eznume.T/ezdeno.T).T
+            # ey=np.cross(ez,ex)
+            # pt=np.cos(coreg_2*theta)*(np.cos(coreg_1*theta)*ex.T+np.sin(coreg_1*theta)*ey.T)+np.sin(coreg_2*theta)*ez.T
+            # lon=np.arctan2(pt[1],pt[0])*180./np.pi
+            # lat=np.arcsin(pt[2])*180./np.pi
+
         else:
             print("not have the freq data of " + freq)
 

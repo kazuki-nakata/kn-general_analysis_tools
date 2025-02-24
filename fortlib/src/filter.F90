@@ -351,6 +351,99 @@ SUBROUTINE Morphology_Binary_Erosion(input,output,isize,jsize,wsize,mask)
 
 END SUBROUTINE Morphology_Binary_Erosion
 
+SUBROUTINE Mirroring(inmask,invalue,output,isize,jsize,iterate,pixel)
+  IMPLICIT NONE
+  INTEGER :: i,j,i2,j2,i3,j3,ii,jj,k,mi,mj,wsize,cnt,isum
+  INTEGER(4),INTENT(IN) :: jsize,isize
+  INTEGER(4),INTENT(IN) :: inmask(1:isize,1:jsize)
+  REAL(4),INTENT(IN) :: invalue(1:isize,1:jsize)
+  REAL(4),INTENT(OUT):: output(1:isize,1:jsize)
+  INTEGER(4):: dum_count(1:isize,1:jsize),dum_input(1:isize,1:jsize)
+  INTEGER(4):: index_array(1:isize,1:jsize,2)
+  INTEGER(4):: count_array(1:isize,1:jsize)
+  REAL(4),INTENT(IN) :: pixel
+  INTEGER(4) :: input(1:isize,1:jsize)
+  INTEGER(4),INTENT(IN) :: iterate
+  REAL(4) :: dx,dy,dval(3,3),dist
+ 
+ wsize=3
+ index_array(:,:,:)=-1
+ count_array(:,:)=0
+ input=inmask
+ output=invalue
+
+ do k =1,iterate
+  dum_count(:,:)=0
+  dum_input(:,:)=0
+  do j =1,jsize
+     do i =1,isize
+        if(input(i,j).eq.1) cycle
+        if(count_array(i,j).ne.0) cycle
+        isum=0
+        dval(:,:)=0
+        do jj=1,wsize
+           do ii=1,wsize
+              i3=i+ii-2
+              j3=j+jj-2
+              if((i3.le.0).or.(i3.gt.isize)) cycle
+              if((j3.le.0).or.(j3.gt.jsize)) cycle
+              dval(ii,jj)=input(i,j)-input(i3,j3)
+              isum=input(i3,j3)+isum
+              if(count_array(i3,j3).ge.1) then
+               i2=index_array(i3,j3,1)
+               j2=index_array(i3,j3,2)
+              endif
+
+           enddo
+        enddo
+
+        if(isum.eq.0) cycle
+        dx = (dval(3,3) + 2*dval(3,2) + dval(3,1)) - (dval(1,3) + 2*dval(1,2) + dval(1,1))
+        dy = (dval(3,3) + 2*dval(2,3) + dval(1,3)) - (dval(3,1) + 2*dval(2,1) + dval(1,1))
+
+        if((dx.eq.0).and.(dy.eq.0)) then
+         index_array(i,j,1)=i2
+         index_array(i,j,2)=j2
+         dum_count(i,j) = count_array(i2,j2)+1!cnt
+         dum_input(i,j)=1
+         output(i,j)=output(i2,j2)
+
+        else
+
+         dist=sqrt(dx**2+dy**2)
+         dx=dx/dist
+         dy=dy/dist
+
+         i2=i-int(sign(1.0,dx))
+         j2=j-int(sign(1.0,dy))
+         if((i2.le.0).or.(i2.gt.isize).or.(j2.le.0).or.(j2.gt.jsize)) then
+            cnt=k
+         else
+            cnt=count_array(i2,j2) + 1
+         endif
+         ! cnt=k
+         i3=i-nint(dx*real(cnt)*pixel)+1
+         j3=j-nint(dy*real(cnt)*pixel)+1
+         if(i3.le.0) i3=1
+         if(i3.gt.isize) i3=isize
+         if(j3.le.0) j3=1
+         if(j3.gt.jsize) j3=jsize
+         if(input(i3,j3).eq.0) cycle
+         index_array(i,j,1) = i3
+         index_array(i,j,2) = j3
+         dum_count(i,j) = cnt
+         dum_input(i,j)=1
+         output(i,j)=output(i3,j3)
+      endif
+     enddo
+  enddo
+  count_array=dum_count+count_array
+  input=dum_input+input
+enddo
+
+END SUBROUTINE Mirroring
+
+
   SUBROUTINE Gaussian_filter(input,output,mask,isize,jsize,wsize,sigma,sf)
     IMPLICIT NONE
   INTEGER :: i,j,k,i2,j2,ii,jj
@@ -450,6 +543,7 @@ END SUBROUTINE Raster_Difference_Int
 
 END SUBROUTINE down_scaling_real
 
+!tabun machigatteiru kara atode syusei
 SUBROUTINE bilin_down_scaling_real_with_mask(input,output,mask0,land,isize,jsize,isize2,jsize2)
    !land: binary data (0:ocean,1:land)
    IMPLICIT NONE
@@ -574,91 +668,157 @@ SUBROUTINE moving_average(width,length,band,mask,mask2,wsize,data)
    data(:,:,:)=dum(:,:,:)
 END SUBROUTINE moving_average
 
-! SUBROUTINE Interpolation_type2(inval,isize2,jsize2,ksize2,inlat,inlon,isize,jsize,ymin,xmin,yint,xint,output)
-!    IMPLICIT NONE
-!    INTEGER :: i,j,ii,jj,k
-!    iNTEGER :: ipos,jpos,ipos2,jpos2
-!    REAL(4) :: dx,dy
-!    INTEGER(4),INTENT(IN) :: jsize,isize,isize2,jsize2,ksize2
-!    REAL(4),INTENT(IN) :: xmin,ymin,xint,yint
-!    REAL(4),INTENT(IN) :: inlat(1:isize,1:jsize),inlon(1:isize,1:jsize)
-!    REAL(4),INTENT(IN) :: inval(1:ksize2,1:isize2,1:jsize2)
-!    REAL(4) :: rlon(1:jsize2),rlat(1:isize2)
-!    REAL(4),INTENT(OUT):: output(1:ksize2,1:isize,1:jsize)
+SUBROUTINE Interpolation_type2(inval,isize2,jsize2,ksize2,inlat,inlon,isize,jsize,ymin,xmin,yint,xint,output)
+   IMPLICIT NONE
+   INTEGER :: i,j,ii,jj,k
+   iNTEGER :: ipos,jpos,ipos2,jpos2
+   REAL(4) :: dx,dy
+   INTEGER(4),INTENT(IN) :: jsize,isize,isize2,jsize2,ksize2
+   REAL(4),INTENT(IN) :: xmin,ymin,xint,yint
+   REAL(4),INTENT(IN) :: inlat(1:isize,1:jsize),inlon(1:isize,1:jsize)
+   REAL(4),INTENT(IN) :: inval(1:ksize2,1:isize2,1:jsize2)
+   REAL(4) :: rlon(1:jsize2),rlat(1:isize2)
+   REAL(4),INTENT(OUT):: output(1:ksize2,1:isize,1:jsize)
 
-!    rlon(1:jsize2) = (/ (xmin+xint*(i-1),i=1,jsize2) /)
-!    where(rlon > 360.)
-!       rlon=rlon-360.
-!    endwhere
-!    rlat(1:isize2) = (/ (ymin+yint*(i-1),i=1,isize2) /)
-!    print *,isize,jsize,isize2,jsize2,xmin,ymin,xint,yint
+   rlon(1:jsize2) = (/ (xmin+xint*(i-1),i=1,jsize2) /)
+   where(rlon > 360.)
+      rlon=rlon-360.
+   endwhere
+   rlat(1:isize2) = (/ (ymin+yint*(i-1),i=1,isize2) /)
+   ! print *,isize,jsize,isize2,jsize2,xmin,ymin,xint,yint
    
-!    do j = 1, jsize
-!       do i = 1, isize
-!          jpos=-999
-!          do jj = 2, jsize2
-!             if((inlon(i,j) > rlon(jj-1)) .and. &
-!                   (inlon(i,j) <= rlon(jj))) then
-!                jpos=jj
-!                jpos2=jj-1
-!             endif
-!          enddo
+   do j = 1, jsize
+      do i = 1, isize
+         jpos=-999
+         do jj = 2, jsize2
+            if((inlon(i,j) > rlon(jj-1)) .and. &
+                  (inlon(i,j) <= rlon(jj))) then
+               jpos=jj
+               jpos2=jj-1
+            endif
+         enddo
 
-!          ipos=-999
-!          do ii = 2, isize2
-!             if((inlat(i,j) > rlat(ii-1)) .and. &
-!                   (inlat(i,j) <= rlat(ii))) then
-!             ipos=ii!isize2-ii+1
-!             ipos2=ii-1!isize2-ii+2
-!             endif
-!          enddo
+         ipos=-999
+         do ii = 2, isize2
+            if((inlat(i,j) > rlat(ii-1)) .and. &
+                  (inlat(i,j) <= rlat(ii))) then
+            ipos=ii!isize2-ii+1
+            ipos2=ii-1!isize2-ii+2
+            endif
+         enddo
 
-!          if(jpos == -999) then
-!             jpos2=1
-!             jpos=jsize2
-!          endif
+         if(jpos == -999) then
+            jpos2=1
+            jpos=jsize2
+         endif
 
-!          if(jpos == -999) then
-!             dx=(inlon(i,j)-(rlon(jpos2)+360.))  / ((rlon(jpos))-rlon(jpos2))
-!          else
-!             dx=(inlon(i,j)-rlon(jpos2)) / (rlon(jpos)-rlon(jpos2))
-!          endif
+         if(jpos == -999) then
+            dx=(inlon(i,j)-(rlon(jpos2)+360.))  / ((rlon(jpos))-rlon(jpos2))
+         else
+            dx=(inlon(i,j)-rlon(jpos2)) / (rlon(jpos)-rlon(jpos2))
+         endif
 
-!          dy=(inlat(i,j)-rlat(ipos2)) / (rlat(ipos)-rlat(ipos2))
+         dy=(inlat(i,j)-rlat(ipos2)) / (rlat(ipos)-rlat(ipos2))
 
-!          ipos =isize2-ipos+1
-!          ipos2=isize2-ipos2+1
+         ipos =isize2-ipos+1
+         ipos2=isize2-ipos2+1
 
-!          do k = 1, ksize2
-!             output(k,i,j) = bilin(dy,dx,Undef, &
-!                            inval(k,ipos2,jpos2), &
-!                            inval(k,ipos,jpos2), &
-!                            inval(k,ipos,jpos), &
-!                            inval(k,ipos2,jpos))
+         do k = 1, ksize2
+            output(k,i,j) = pre_bilin(dy,dx,Undef, &
+                           inval(k,ipos2,jpos2), &
+                           inval(k,ipos,jpos2), &
+                           inval(k,ipos,jpos), &
+                           inval(k,ipos2,jpos))
 
-!          enddo
-!       enddo
-!       enddo
-! END SUBROUTINE Interpolation_Type2
+         enddo
+      enddo
+      enddo
+END SUBROUTINE Interpolation_Type2
 
-! function bilin(dx,dy,Undef,var1,var2,var3,var4)
-!   implicit none
-!   REAL(4) :: bilin
-!   REAL(4),INTENT(in) :: dx, dy, Undef
-!   REAL(4),INTENT(in) :: var1,var2,var3,var4
-! !   REAL(4),INTENT(in) :: la1,la2,la3,la4
+SUBROUTINE Interpolation_type3(inval,isize2,jsize2,ksize2,inlat,inlon,isize,ymin,xmin,yint,xint,output)
+   IMPLICIT NONE
+   INTEGER :: i,j,ii,jj,k
+   iNTEGER :: ipos,jpos,ipos2,jpos2
+   REAL(4) :: dx,dy
+   INTEGER(4),INTENT(IN) :: isize,isize2,jsize2,ksize2
+   REAL(4),INTENT(IN) :: xmin,ymin,xint,yint
+   REAL(4),INTENT(IN) :: inlat(1:isize),inlon(1:isize)
+   REAL(4),INTENT(IN) :: inval(1:ksize2,1:isize2,1:jsize2)
+   REAL(4) :: rlon(1:jsize2),rlat(1:isize2)
+   REAL(4),INTENT(OUT):: output(1:ksize2,1:isize)
 
-!   if((var1 /= Undef) .and. (var2 /= Undef) .and. &
-!        & (var3 /= Undef) .and. (var4 /= Undef)) then
-!     bilin = (1.-dx)*(1.-dy)*var1 &
-!          & +    dx *(1.-dy)*var2 &
-!          & +    dx *    dy *var3 &
-!          & +(1.-dx)*    dy *var4
-!   else
-!     bilin = Undef
-!   endif
-! end function bilin
+   rlon(1:jsize2) = (/ (xmin+xint*(i-1),i=1,jsize2) /)
+   where(rlon > 360.)
+      rlon=rlon-360.
+   endwhere
+   rlat(1:isize2) = (/ (ymin+yint*(i-1),i=1,isize2) /)
+   print *,isize,isize2,jsize2,xmin,ymin,xint,yint
+   
+   do i = 1, isize
+      jpos=-999
+      do jj = 2, jsize2
+         if((inlon(i) > rlon(jj-1)) .and. &
+               (inlon(i) <= rlon(jj))) then
+            jpos=jj
+            jpos2=jj-1
+         endif
+      enddo
 
+      ipos=-999
+      do ii = 2, isize2
+         if((inlat(i) > rlat(ii-1)) .and. &
+               (inlat(i) <= rlat(ii))) then
+         ipos=ii!isize2-ii+1
+         ipos2=ii-1!isize2-ii+2
+         endif
+      enddo
+
+      if(jpos == -999) then
+         jpos2=1
+         jpos=jsize2
+      endif
+
+      if(jpos == -999) then
+         dx=(inlon(i)-(rlon(jpos2)+360.))  / ((rlon(jpos))-rlon(jpos2))
+      else
+         dx=(inlon(i)-rlon(jpos2)) / (rlon(jpos)-rlon(jpos2))
+      endif
+
+      dy=(inlat(i)-rlat(ipos2)) / (rlat(ipos)-rlat(ipos2))
+
+      ipos =isize2-ipos+1
+      ipos2=isize2-ipos2+1
+
+      do k = 1, ksize2
+         output(k,i) = pre_bilin(dy,dx,Undef, &
+                        inval(k,ipos2,jpos2), &
+                        inval(k,ipos,jpos2), &
+                        inval(k,ipos,jpos), &
+                        inval(k,ipos2,jpos))
+
+      enddo
+   enddo
+END SUBROUTINE Interpolation_Type3
+
+function pre_bilin(dx,dy,Undef,var1,var2,var3,var4)
+  implicit none
+  REAL(4) :: pre_bilin
+  REAL(4),INTENT(in) :: dx, dy, Undef
+  REAL(4),INTENT(in) :: var1,var2,var3,var4
+!   REAL(4),INTENT(in) :: la1,la2,la3,la4
+
+  if((var1 /= Undef) .and. (var2 /= Undef) .and. &
+       & (var3 /= Undef) .and. (var4 /= Undef)) then
+    pre_bilin = (1.-dx)*(1.-dy)*var1 &
+         & +    dx *(1.-dy)*var2 &
+         & +    dx *    dy *var3 &
+         & +(1.-dx)*    dy *var4
+  else
+    pre_bilin = Undef
+  endif
+end function pre_bilin
+
+!imihumei. atode syusei
 function bilin(dx,dy,var,mask,isize)
   implicit none
   REAL(4) :: bilin

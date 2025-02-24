@@ -16,12 +16,14 @@ def reverse_clip(in_maskFile, out_maskFile):
     geoproj = osr.SpatialReference()
     geoproj.ImportFromEPSG(3411)
     wkt_pr = geoproj.ExportToWkt()
-    options = ["", "-f", "ESRI Shapefile", "-t_srs", wkt_pr, out_maskFile, in_maskFile]
+    options = ["", "-f", "ESRI Shapefile",
+               "-t_srs", wkt_pr, out_maskFile, in_maskFile]
     ogr2ogr.main(options)
 
 
 def reproject(ds, outfile="/vsimem/output.tif", epsg_str="EPSG:4326", NODATA_VALUE=0):
-    output_ds = gdal.Warp(outfile, ds, dstSRS=epsg_str, resampleAlg="bilinear", dstNodata=NODATA_VALUE)
+    output_ds = gdal.Warp(outfile, ds, dstSRS=epsg_str,
+                          resampleAlg="bilinear", dstNodata=NODATA_VALUE)
     return output_ds
 
 
@@ -57,10 +59,16 @@ def geocode(
     trans = geo_info.get_coord_transform_epsg(src_epsg, dst_epsg)
 
     gcps2 = []
-    for gcp in gcps:
-        x, y = trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2]
-        gcp2 = gdal.GCP(x, y, 0, gcp.GCPPixel, gcp.GCPLine)
-        gcps2.append(gcp2)
+    if src_epsg_str == "EPSG:4326":
+        for gcp in gcps:
+            x, y = trans.TransformPoint(gcp.GCPY, gcp.GCPX)[0:2]
+            gcp2 = gdal.GCP(x, y, 0, gcp.GCPPixel, gcp.GCPLine)
+            gcps2.append(gcp2)
+    else:
+        for gcp in gcps:
+            x, y = trans.TransformPoint(gcp.GCPX, gcp.GCPY)[0:2]
+            gcp2 = gdal.GCP(x, y, 0, gcp.GCPPixel, gcp.GCPLine)
+            gcps2.append(gcp2)
 
     tmp_ds = geo_io.copy_dataset(ds)
     tmp_ds.SetGCPs(gcps2, target_ref)
@@ -92,7 +100,8 @@ def clip_rectangle(ds, minX, minY, maxX, maxY, outfile="/vsimem/output.tif"):
 
 def warp(ds, outfile, epsg_str, xres, yres, minX, minY, maxX, maxY, resample):
     output_ds = gdal.Warp(
-        outfile, ds, dstSRS=epsg_str, xRes=xres, yRes=yres, outputBounds=(minX, minY, maxX, maxY), resampleAlg=resample
+        outfile, ds, dstSRS=epsg_str, xRes=xres, yRes=yres, outputBounds=(
+            minX, minY, maxX, maxY), resampleAlg=resample
     )
     return output_ds
 
@@ -221,7 +230,8 @@ def rasterize_by_raster_with_gcps(
     band.SetNoDataValue(0)
     band.FlushCache()
 
-    gdal.RasterizeLayer(tmp_ds, [1], poly_layer, options=["ATTRIBUTE=id", "ALL_TOUCHED=TRUE"])  # , burn_values=[1]
+    gdal.RasterizeLayer(tmp_ds, [1], poly_layer, options=[
+                        "ATTRIBUTE=id", "ALL_TOUCHED=TRUE"])  # , burn_values=[1]
     tmp_ds.FlushCache()
 
 
@@ -236,7 +246,8 @@ def rasterize_by_raster_with_proj(raster_ds, poly_ds, outfile="/vsimem/output.ti
         options.append("ATTRIBUTE=id")
         gdal.RasterizeLayer(dst_ds, [1], poly_layer, options=options)
     else:
-        gdal.RasterizeLayer(dst_ds, [1], poly_layer, options=options, burn_values=[1])
+        gdal.RasterizeLayer(dst_ds, [1], poly_layer,
+                            options=options, burn_values=[1])
 
     return dst_ds
 
@@ -267,7 +278,8 @@ def reproject_vector(s_ds, t_srs, outfile="/vsimem/output.shp"):
         t_feature.SetGeometry(geom)
 
         for i in range(0, t_lyr_defn.GetFieldCount()):
-            t_feature.SetField(t_lyr_defn.GetFieldDefn(i).GetNameRef(), feature.GetField(i))
+            t_feature.SetField(t_lyr_defn.GetFieldDefn(
+                i).GetNameRef(), feature.GetField(i))
 
         t_lyr.CreateFeature(t_feature)
 

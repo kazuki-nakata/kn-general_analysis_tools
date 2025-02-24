@@ -653,7 +653,7 @@ do l = 1, n_grid
     i = nint(grid_x(l))
     j = nint(grid_y(l))
     k = grid_id(l)
-    if((id1_grid(i,j).ge.k).and.(id2_grid(i,j).le.k)) then
+    if((k.ge.id1_grid(i,j)).and.(k.le.id2_grid(i,j))) then
     if(mask_grid(i,j).eq.999) cycle
       pindex(l)=findex(i,j)
       uindex(l)=1
@@ -798,6 +798,7 @@ out_var=pj_new
 enddo
 
 END SUBROUTINE rSIR2_vh_fast
+
 
 SUBROUTINE mart_vh_fast(grid_x,grid_y,grid_id,ps_angle,ps_scale,var,mask_grid,id1_grid,id2_grid,out_var,&
 n_grid,nx,ny,nz,wsize,ap,nx_ap,ny_ap,int_ap,res,fwhm,iterate)
@@ -1023,7 +1024,6 @@ oimax=imax/2
 ojmax=jmax
  pi=acos(-1.)
  degra=pi/180. ; radeg=180./pi
-
  do j=1,ojmax
    do i=1,oimax
      o=2*i-1;e=2*i

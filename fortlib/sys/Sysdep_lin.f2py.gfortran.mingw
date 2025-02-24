@@ -1,8 +1,8 @@
 PC = f2py
 FC = gfortran
 CC = gcc
-FFLAGS = -fPIC -static-libgfortran
-PFFLAGS = --fcompiler=gnu95 --f90flags="-static-libgfortran"
+FFLAGS = -fPIC -static-libgfortran -L/usr/local/lib -llapack -lblas
+PFFLAGS = --fcompiler=gnu95 -L/usr/local/lib/ -llapack -lblas --f90flags="-static-libgfortran -L/usr/local/lib -llapack -lblas"
 RM = rm -f
 CP = cp -f
 MV = mv -f

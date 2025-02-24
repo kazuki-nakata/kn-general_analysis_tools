@@ -34,67 +34,64 @@ def calc_vapor_pressure(t, mode=1):  # input temperature (Kelvin)
 
 
 def calc_swave(al, clo, td2m, jday, lat, hour):
+    # 元プログラムではa1が南半球で-23.44となっている。正解はこっち。両極とも同じ値。（既存処理も同じようになっている。）
+    a1 = 23.44
     s = 1358.0
     b01 = 9.5
     b02 = 265.3
-    a1 = -23.44
     a2 = 172.0
-    st = 0.0
     ha = 0.0
     sz = 0.0
-    rjday = jday
 
-    #   --- calc the vapor pressure -----------------------------
-    ev = 6.11 * 10.0 ** ((b01 * (td2m - 273.15)) / (b02 + td2m - 273.15))
-    #   --- calc dec: declination -------------------------------
-    dec = np.radians(a1 * np.cos(np.radians(a2 - rjday)))
+    ev = 6.11 * (10.0 ** ((b01 * (td2m - 273.15)) / (b02 + td2m - 273.15)))
+    dec = np.radians(a1 * np.cos(np.radians(a2 - jday)))
     rad_la = np.radians(lat)
 
     st = hour
     ha = (12.0 - st) * np.pi / 12.0
     sz = np.sin(rad_la) * np.sin(dec) + \
         np.cos(rad_la) * np.cos(dec) * np.cos(ha)
-    if sz <= 0.0:
-        sz = 0.0
-    q1 = np.where(sz < 0, 0, (s * (sz**2)) / ((sz + 2.7)
-                  * ev * (1.0e-3) + 1.085 * sz + 0.10))
+    sz = np.where(sz < 0, 0.0, sz)
+    q1 = (s * (sz**2)) / ((sz + 2.7) * ev * (1.0E-3) + 1.085 * sz + 0.10)
 
+    # han = (12.-12)*np.pi/12.
+    # sz = np.sin(rad_la)*np.sin(dec) + np.cos(rad_la)*np.cos(dec)*np.cos(han)
     an = np.angle(np.arcsin(sz))
     # (Andreas and Ackley,1982)
     q2 = (1 - al) * q1 * (1 - 0.62 * clo + 0.0019 * an)
     return q2
 
 
-def calc_lwave_MC1973(clo, st, t2m, em):  # maykut and churtch 1973 by alaska data
+def calc_lwave_MC1973(clo, ts, t2m, em):  # maykut and churtch 1973 by alaska data
     # --- incoming longwave radiation ---
     ila = (
         0.7855 * (1.0 + 0.2232 * clo**2.75) *
         params["general"]["sb_const"] * t2m**4.0
     )  # (Maykut and Church, 1973)
-    ola = -(em * params["general"]["sb_const"] * st**4)
+    ola = -(em * params["general"]["sb_const"] * ts**4)
     return ila, ola
 
 
 # Koenig-Langlo and Augstein, 1994 by polar region data
-def calc_lwave_KA1994(clo, st, t2m, em):
+def calc_lwave_KA1994(clo, ts, t2m, em):
     ila = (0.765 + 0.22 * clo**3.0) * params["general"]["sb_const"] * t2m**4
-    ola = -(em * params["general"]["sb_const"] * st**4)
+    ola = -(em * params["general"]["sb_const"] * ts**4)
     return ila, ola
 
 
-def calc_lwave_G1998(clo, st, t2m, em):  # Guest（1997）by weddell data
+def calc_lwave_G1998(clo, ts, t2m, em):  # Guest（1997）by weddell data
     ila = (params["general"]["sb_const"] * t2m**4 - 85.6) * (1 + 0.26 * clo)
-    ola = -(em * params["general"]["sb_const"] * st**4)
+    ola = -(em * params["general"]["sb_const"] * ts**4)
     return ila, ola
 
 
-def calc_lwave_J2006(st, t2m, td2m, em):  # Jun et al. (2006) for arctic
+def calc_lwave_J2006(ts, t2m, td2m, em):  # Jun et al. (2006) for arctic
     # ea = (qa * p) / 0.622
     ea = calc_vapor_pressure(td2m, mode=4)
     eps_a = (0.0003 * (t2m - 273.16) ** 2 - 0.0079 *
              (t2m - 273.16) + 1.2983) * (ea / t2m) ** (1 / 7)
     ila = eps_a * params["general"]["sb_const"] * t2m**4
-    ola = -(em * params["general"]["sb_const"] * st**4)
+    ola = -(em * params["general"]["sb_const"] * ts**4)
     return ila, ola
 
 
@@ -255,3 +252,64 @@ def calc_thermal_ice_properties(slp, t2m, td2m, w10m, ic, cl, tw, lat, jday, hou
         return hbi_all, hbw_all, ice_th, hbi_list, hbw_list
     else:
         return hbi_all, hbw_all, ice_th
+# fmt: on
+
+
+def calc_heat_flux_sice_atmos(slp, t2m, td2m, w10m, ric, c, tw, lat, lon, jday, hi, hs, ali, alw,
+                              lw_func=calc_lwave_G1998, sw_func=calc_swave, th_func=calc_theat_O2003):
+
+    cki = 2.04  # params["seaice"]["ck"]
+    cks = 0.31  # params["snow"]["ck"]
+    tf = -1.86  # params["seawater"]["tf"]
+    emi = 0.99
+    emw = 0.97
+    tk = 273.15
+    ti = np.where(t2m-10 >= tk, tk-10.0, t2m-10.)
+    ckb = cki*cks/(cki*hs+cks*hi)
+    ti2 = np.zeros(ti.shape[0])
+    dt = np.ones(ti.shape[0])
+    res0 = np.ones(ti.shape[0])
+    hour = (jday-np.floor(jday))*24+lon*24/360
+    jday2 = np.floor(jday)
+
+    ilen = 1
+    nloop = 0
+    qi = 0
+    qw = 0
+    for dh in range(-6, 7):
+        qi = qi+sw_func(ali, c, td2m, jday2, lat, hour+dh)/13
+        qw = qi+sw_func(alw, c, td2m, jday2, lat, hour+dh)/13
+
+    while ilen != 0:
+        mask = dt > 0.001
+        # idx = idx[mask]
+        ti_m = ti[mask]
+        dt_m = dt[mask]
+        res0_m = res0[mask]
+        ilw, olwi = lw_func(c[mask], ti_m, t2m[mask], emi)
+        ilw, olww = lw_func(c[mask], tw, t2m[mask], emw)
+        sehi, sehw, lahi, lahw = th_func(
+            ti_m, tw, w10m[mask], ric[mask], t2m[mask], td2m[mask], slp[mask])
+        fc = ckb[mask]*(tf+tk-ti_m)
+        res = ilw+olwi+sehi+lahi+fc+qi[mask]
+        hres = res*res0[mask]
+        ti[mask] = np.where((hres > 0) & (ti_m < tk), ti_m+dt_m, ti_m-dt_m)
+        dt[mask] = np.where((hres > 0) & (ti_m < tk), dt_m, dt_m*0.1)
+        res0[mask] = np.where((hres > 0) & (ti_m < tk), res, res0_m)
+        ilen = len(ti_m[dt_m > 0.001])
+        nloop = nloop+1
+
+    ilw, olwi = lw_func(c, ti, t2m, emi)
+    ilw, olww = lw_func(c, tw, t2m, emw)
+    sehi, sehw, lahi, lahw = th_func(ti2, tw, w10m, ric, t2m, td2m, slp)
+    fc = ckb*(tf+tk-ti)
+    res = ilw+olwi+sehi+lahi+fc+qi
+
+    hbi = np.where(ti < tk, -fc*ric, (res-fc)*ric)
+    hbw = (qw+ilw+olww+sehw+lahw)*(1.-ric)
+    hb = hbw+hbi
+    sw = qi*ric+qw*(1.-ric)
+    lw = ilw+olwi*ric+olww*(1.-ric)
+    se = sehi*ric+sehw*(1.-ric)
+    la = lahi*ric+lahw*(1.-ric)
+    return hb, sw, lw, se, la

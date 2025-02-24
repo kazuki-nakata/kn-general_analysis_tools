@@ -293,7 +293,6 @@ def interpolation_89G_AB0(latb, lonb, tbb, lata, lona, spa, epsg, range_x=3, ran
 
 def interpolation_89G_AB(latb, lonb, tbb, lata, lona, spa, orb, orb_i, orb_p, ecl, res=10000, num_order=10):
     """
-    For polar region, input epsg is set to 3413:arctic, 3976:antarctic
     coord index calculated from the identified epsg is only used for finding a neighborhood pixel.
     """
     # -------------get antenna pattern--------

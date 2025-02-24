@@ -207,8 +207,9 @@ class TLEsPerSat:
             lon, lat, _ = geom.Centroid().GetPoint()
             bool_list = (
                 np.max(geo_info.calc_distances(
-                    self.output[:, :, 1], self.output[:, :, 0], lon, lat), axis=1) < 5000
-            )
+                    self.output[:, :, 1], self.output[:, :, 0], lon, lat), axis=1) < 5000*1000
+            )  # 5000km以上離れている場合は、対象外とし計算負荷を軽減。実際のintersect判定とは別。
+
             geom2_list = geo_geom.create_polygons(self.output[bool_list])
             [geom.Transform(trans) for geom in geom2_list]
             attr2_dict = {}

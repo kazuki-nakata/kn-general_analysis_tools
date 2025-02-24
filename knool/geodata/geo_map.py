@@ -8,6 +8,8 @@ from . import geo_transform, geo_io, geo_geom
 from scipy import interpolate
 from scipy.spatial import cKDTree as KDTree
 from ..fortlib import grid_data
+from ..image import img_proc
+from PIL import Image
 
 
 class Search:
@@ -162,13 +164,22 @@ class _Search_pre:
         self.map_field_i[tuple(map(tuple, trans_array_t))] = index_array[0]
         self.map_field_j[tuple(map(tuple, trans_array_t))] = index_array[1]
 
-    def search_index(self, source_ref, iarray, jarray):
+    def search_index(self, source_ref, iarray, jarray, mode=0, mask=False):
         # coord_array : For latlon, array(n,2). (n,0)->lat (n,1)->lon
         # output coord_array: array(n,2). (n,0) -> x axis (horizontal)
 
-        coord_array, index_array = self._2Dcoord_to_1Dcoord_and_1Dindex(
-            iarray, jarray)
-        index_array = index_array.T
+        if mode == 0:
+            coord_array, index_array = self._2Dcoord_to_1Dcoord_and_1Dindex(
+                iarray, jarray)
+            index_array = index_array.T
+        else:
+            coord_array = np.array([iarray[mask], jarray[mask]]).T
+            length = iarray.shape[0]
+            width = jarray.shape[1]
+            index_i, index_j = np.meshgrid(
+                np.arange(0, length), np.arange(0, width))
+            index_array = np.array(
+                [index_i.T[mask], index_j.T[mask]]).T
 
         coord_transform = osr.CoordinateTransformation(
             source_ref, self.target_ref)
@@ -386,35 +397,38 @@ class Grid:
         coord = np.array([iarray2, jarray2]).T
         return coord
 
-    def get_image(self, var_name, id=0, interp="nearest", mode=1, param=1):
+    def get_image(self, var_name, id=0, interp="nearest", mode=1, res_ratio=1, param=1):
         """
         Currently, this method is worked only in id = concave_hull index.
         mode 1 -> kdtree mask, param = distance (float, unit: cell num)
         mode 2 -> mask by concave hull numpy array. param is note used in this mode.
         mode 3 -> fast computation for nearest neighbor using fortran library. interp is not used in this mode.
+        mode 4 -> fast computation for gaussian filter using fortran library. interp is not used in this mode.
         """
-        nx = self.nx
-        ny = self.ny
+        nx = int(self.nx*res_ratio)
+        ny = int(self.ny*res_ratio)
         X = np.linspace(1, nx, nx)
         Y = np.linspace(1, ny, ny)
         X, Y = np.meshgrid(X, Y)  # 2D grid for interpolation
         df = self.df[self.df["id"] == id]
 
-        grid_x = df["grid_x"].values+0.5
-        grid_y = df["grid_y"].values+0.5
+        grid_x = df["grid_x"].values*res_ratio+0.5
+        grid_y = df["grid_y"].values*res_ratio+0.5
+
         coef = 10**(7-len(str(int(np.max(grid_x)))))
         if coef >= 1:
             grid_x2 = grid_x.astype(np.float32)
             grid_x = np.where(
                 grid_x2 == nx+0.5, (grid_x*coef).astype(np.int32)/coef, grid_x)
+
         coef = 10**(7-len(str(int(np.max(grid_y)))))
         if coef >= 1:
             grid_y2 = grid_y.astype(np.float32)
             grid_y = np.where(
                 grid_y2 == ny+0.5, (grid_y*coef).astype(np.int32)/coef, grid_y)
+
         grid_x = grid_x.astype(np.float32)
         grid_y = grid_y.astype(np.float32)
-
         grid_z = df[var_name].values.astype(np.float32)
 
         if mode == 1:
@@ -427,6 +441,7 @@ class Grid:
 
         elif mode == 2:
             mask = self.concave_hull[id]
+            mask = img_proc.resize(mask, ny, nx, resample=Image.NEAREST)
             if mask.sum() == 0:
                 return np.full(mask.shape, np.nan)
             Z = interpolate.griddata(
@@ -434,10 +449,19 @@ class Grid:
 
         elif mode == 3:
             mask = self.concave_hull[id]
-            mask_grid = np.zeros([self.nx, self.ny])
+            mask = img_proc.resize(mask, ny, nx, resample=Image.NEAREST)
+            mask_grid = np.zeros([nx, ny])
             wsize, res, threshold = param[:]
             Z = grid_data.nearest_neighbor(
                 grid_x, grid_y, grid_z, mask_grid, wsize, res, threshold).T[::-1, :]
+
+        elif mode == 4:
+            mask = self.concave_hull[id]
+            mask = img_proc.resize(mask, ny, nx, resample=Image.NEAREST)
+            mask_grid = np.zeros([nx, ny])
+            wsize, sigma, res, rm_outer = param[:]
+            Z = grid_data.weighted_mean_sigma(
+                grid_x, grid_y, grid_z, mask_grid, wsize, sigma, res, rm_outer).T[::-1, :]
 
         Z[~mask] = np.nan
 

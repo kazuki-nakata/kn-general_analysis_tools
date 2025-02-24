@@ -48,7 +48,7 @@ def make_empty_raster(prop, nodata=0, num_band=1, out_dtype=gdal.GDT_Float32, ou
 
 
 # fmt: off
-def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no_data, file_type, geomode="proj",
+def _pre_make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no_data, file_type, geomode="proj",
                            geotrans=None, geoproj=None, gcps=None, gcpsrc=None):
     # fmt: on
     data_mask = np.where(data == no_data, np.NaN, data)
@@ -78,7 +78,41 @@ def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no
     ds.SetMetadata({'TIFFTAG_YRESOLUTION': '1/1'})
 
     ds.FlushCache()
+#     return ds
+
+# fmt: off
+def make_raster_from_array(data, filepath, pixel_x, pixel_y, num_band, dtype, no_data, file_type, geomode="proj",
+                           geotrans=None, geoproj=None, gcps=None, gcpsrc=None):
+    # fmt: on
+    # data_mask = np.where(data == no_data, np.NaN, data)
+    driver = gdal.GetDriverByName(file_type)
+    ds = driver.Create(filepath, pixel_x, pixel_y, num_band, dtype)
+
+    if num_band == 1:
+        band = ds.GetRasterBand(1)
+        band.WriteArray(data)
+        band.SetNoDataValue(no_data)
+        band.FlushCache()
+    else:
+        for i in range(0, num_band):
+            band = ds.GetRasterBand(i + 1)
+            band.WriteArray(data[i, :, :])
+            band.SetNoDataValue(no_data)
+            band.FlushCache()
+
+    if geomode == "proj":
+        ds.SetGeoTransform(geotrans)
+        ds.SetProjection(geoproj)
+    elif geomode == "gcp":
+        ds.SetGCPs(gcps, gcpsrc)
+
+    ds.SetMetadata({'TIFFTAG_COPYRIGHT': 'KN_TOOL'})
+    ds.SetMetadata({'TIFFTAG_XRESOLUTION': '1/1'})
+    ds.SetMetadata({'TIFFTAG_YRESOLUTION': '1/1'})
+
+    ds.FlushCache()
     return ds
+
 
 
 def make_raster_from_array_and_prop(data, filepath, prop, dtype=gdal.GDT_Float32, no_data=9.9E33, file_type="GTiff"):
