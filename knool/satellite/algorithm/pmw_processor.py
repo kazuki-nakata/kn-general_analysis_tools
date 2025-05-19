@@ -10,7 +10,6 @@ from ...fortlib import sensor_geometry as sg
 from ...geodata import geo_map
 from osgeo import osr
 from ...image import img_destripe
-import matplotlib.pyplot as plt
 
 
 def calc_TBD_TBU_Tau(wv, ts, clw, eaz, freq_list=["6.9GHz", "18.7GHz", "23.8GHz", "36.5GHz", "89.0GHz"]):

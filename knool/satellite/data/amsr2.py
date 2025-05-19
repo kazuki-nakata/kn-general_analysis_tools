@@ -4,7 +4,7 @@ import os
 from datetime import datetime as dt
 from datetime import timedelta
 from ...helpers.misc import import_config
-from ...geodata import geo_info, geo_io, geo_geom
+from ...geodata import geo_io
 from ...fortlib import pmw_processor
 
 
