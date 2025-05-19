@@ -1,0 +1,119 @@
+Description: "in prep."
+Profiles:
+    General:
+        DateTimes: True  # Date and time (YYYY,MM,DD,HH,MM,SS) – not used for MW radiance calc except for possible atlas, but must be set
+        SurfGeom: True
+        Angles: True
+    Atmosphere:
+        PHalf: True
+        T: True
+        Q: True
+        O3: False
+        CO2: False
+        N2O: False
+        CO: False
+        CH4: False
+        SO2: False
+        CLW: False
+        CLW_DEFF: False
+        MWClw: True
+        MWCiw: True
+        MWSnow: True
+        MWRain: True
+        NearSurface: True
+        HydroFrac: False
+        SimpleCloud: False
+        ClwdeParam: False
+        IcedeParam: False
+        HydroFracEff: False
+        Zeeman: False
+    Surface:
+        SurfType: True
+        Skin: True
+        SurfaceFraction: False
+Options:
+    Settings:
+        VerboseWrapper: True # Enable verbose output from wrapper (for debugging)
+        StoreRad: True
+        StoreEmisRefl: True
+        Hydrometeors: True
+        ThermalSolver: 3 #THERMAL_SOLVER_DELTA_EDD #default
+        OverlapParam: 3 #CLOUD_OVERLAP_2COL_WEIGHTED
+    Defalut:
+        ADKBT: True
+        ADKRefl: True
+        Aerosols: False
+        ApplyRegLimits: False
+        BaranIceVersion: 2
+        BtOvercastCalc: False
+        CH4Data: False
+        CLWCloudTop: 322.0
+        CLWData: False
+        CO2Data: False
+        COData: False
+        CheckOpts: False
+        CheckProfiles: True
+        ChouTangFactor: 0.05
+        ChouTangMod: False
+        ColThreshold: 0.0
+        DomAccuracy: 0.0
+        DomNstreams: 8
+        DomOpdepThreshold: 0.0
+        EnableInterp: True
+        EnablePcrttov: False
+        GasOpdepCalc: True
+        HydroFracTLAD: True
+        Hydrometeors: False
+        IcePolarisation: 1.4
+        InterpMode: 4
+        IrSeaEmisModel: 2
+        Lambertian: False
+        LambertianFixedAngle: True
+        MwPolMode: 1
+        MwSeaEmisModel: 3
+        N2OData: False
+        NPCScores: -1
+        NlteCorrection: False
+        NprofsPerCall: 1
+        Nthreads: 1
+        O3Data: False
+        Opdep13GasClip: True
+        OverlapParam: 0
+        PcBand: 1
+        PcRegSet: 1
+        PerHydroFrac: False
+        PermittivityParam: 2
+        PlaneParallel: False
+        PressureGradients: False
+        RadDownLinTau: True
+        Radar: False
+        RadarKAzef: False
+        RayleighMaxWavelength: 2.0
+        RayleighMinPressure: 0.0
+        RayleighMultiScatt: False
+        RayleighSingleScatt: True
+        RecRad: False
+        Refraction: True
+        SO2Data: False
+        Solar: False
+        SolarSeaReflModel: 1
+        SolarSolver: 1
+        StoreDiagOutput: False
+        StoreEmisRefl: False
+        StoreEmisTerms: False
+        StoreRad: False
+        StoreRad2: False
+        StoreTrans: False
+        ThermalSolver: 3
+        TransmittancesOnly: False
+        TwoColMaxFracMaxP: 750.0
+        UseFoamFraction: False
+        UseQ2m: True
+        UseT2m: True
+        UseTskinEff: False
+        UserAerOptParam: False
+        UserHydroOptParam: False
+        Verbose: True
+        VerboseWrapper: False
+        ZeroHydroTLAD: False
+        

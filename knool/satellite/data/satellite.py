@@ -52,7 +52,7 @@ class TLEsPerSat:
         pos_list = []
         date_list = []
         for date in ds_date:
-            print(date)
+            #            print(date)
             lat, lon, ele = self.calc_position_at(date)
             pos_list.append([lat, lon])
             date_list.append(date)

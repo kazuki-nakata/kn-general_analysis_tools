@@ -239,14 +239,15 @@ class Grid:
         self.id_list = []
         self.concave_hull = []
 
-    def get_geotrans(self):
-        geotrans = (self.lt_x, self.res, 0.0, self.lt_y, 0.0, -self.res)
+    def get_geotrans(self, res_ratio=1):
+        geotrans = (self.lt_x, self.res/res_ratio, 0.0,
+                    self.lt_y, 0.0, -self.res/res_ratio)
         return geotrans
 
-    def make_empty_raster_ds(self, nodata=0, num_band=1, out_dtype=gdal.GDT_Float32, outfile="/vsimem/output.tif"):
-        geotrans = self.get_geotrans()
-        pixel_x = self.nx
-        pixel_y = self.ny
+    def make_empty_raster_ds(self, nodata=0, num_band=1, out_dtype=gdal.GDT_Float32, outfile="/vsimem/output.tif", res_ratio=1):
+        geotrans = self.get_geotrans(res_ratio)
+        pixel_x = self.nx*res_ratio
+        pixel_y = self.ny*res_ratio
         geoproj = self.target_ref.ExportToWkt()
 
         prop = []
@@ -259,12 +260,12 @@ class Grid:
             prop, nodata=nodata, num_band=num_band, out_dtype=out_dtype, outfile=outfile)
         return tmp_ds
 
-    def get_land_data(self, nodata=0, outfile="/vsimem/output.tif", all_touched=False, shpfile=None):
+    def get_land_data(self, nodata=0, outfile="/vsimem/output.tif", all_touched=False, shpfile=None, res_ratio=1):
         if shpfile is None:
             shpfile = os.path.join(os.path.dirname(
                 __file__), "data", "GSHHS_i_L1L5_dissolve.shp")
-        print(shpfile)
-        tmp_ds = self.make_empty_raster_ds(nodata=nodata, outfile=outfile)
+        tmp_ds = self.make_empty_raster_ds(
+            nodata=nodata, outfile=outfile, res_ratio=res_ratio)
         s_ds = ogr.Open(shpfile, 0)
         poly_ds = geo_transform.reproject_vector(
             s_ds, self.target_ref, outfile="/vsimem/output.shp")
