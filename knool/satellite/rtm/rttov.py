@@ -49,6 +49,7 @@ class Profiles_tool:
 
     def set_profiles_from_obj(self, obj):
         for key in vars(obj).keys():
+
             exec("self.profiles."+key+"=obj."+key)
 
     def confirm_profiles(self):

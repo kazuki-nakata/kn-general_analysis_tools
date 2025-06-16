@@ -1,9 +1,7 @@
 MODULE PMW_Processor
 USE sensor_geometry
 IMPLICIT NONE
-INTEGER(4),PARAMETER :: null = -32767
 REAL(4),PARAMETER :: Undef = 9.9E33
-REAL(4),PARAMETER :: mask_val = 999
 CONTAINS
 
 SUBROUTINE rSIR(grid_x,grid_y,vs,vb,vg,var,mask_grid,out_var,n_grid,nx,ny,wsize,ap,nx_ap,ny_ap,int_ap,res,fwhm,iterate)
