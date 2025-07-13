@@ -10,6 +10,8 @@ from ...fortlib import sensor_geometry as sg
 from ...geodata import geo_map
 from osgeo import osr
 from ...image import img_destripe
+from scipy.stats import multivariate_normal
+from scipy.signal import convolve2d
 
 
 def calc_TBD_TBU_Tau(wv, ts, clw, eaz, freq_list=["6.9GHz", "18.7GHz", "23.8GHz", "36.5GHz", "89.0GHz"]):
@@ -77,12 +79,63 @@ def get_antenna_pattern_bessel_beam(fwhm_x, fwhm_y, x_array, y_array, offset_x=0
     return Z
 
 
+def get_antenna_pattern(nh, fwhm_x, fwhm_y, antenna_func):
+    # -------------get antenna pattern--------
+    az = np.arange(-nh, nh+1, 1)
+    el = np.arange(-nh, nh+1, 1)
+    X, Y = np.meshgrid(az, el)
+    func_args = [fwhm_x, fwhm_y, X, Y]
+    ap = antenna_func(*func_args)
+    ap = ap/np.sum(ap)
+    return ap
+
+
+def get_descrete_integrated_pattern(ap, ratio, boundary="symm", mode="same", decimation=True):
+    iratio = int(round(1/ratio))
+    integ_filter = np.full((iratio, iratio), 1)
+    ap2 = convolve2d(ap, integ_filter, boundary='symm', mode='same')
+    if decimation:
+        ap2 = ap2[::iratio, ::iratio]
+    return ap2
+
+
+def get_descrete_integrated_gaussian_pattern(nh, fwhm_x, fwhm_y):
+    nh2 = nh*2+1
+    x_edges = np.linspace(-nh-0.5, nh+0.5, nh2+1)
+    y_edges = np.linspace(-nh-0.5, nh+0.5, nh2+1)
+    sigma_x = fwhm_x / np.sqrt(2 * np.log(2))/2
+    sigma_y = fwhm_y / np.sqrt(2 * np.log(2))/2
+
+    # セル左下(x0, y0) と右上(x1, y1) の格子を作成
+    x0, x1 = x_edges[:-1], x_edges[1:]
+    y0, y1 = y_edges[:-1], y_edges[1:]
+    X0, Y0 = np.meshgrid(x0, y0)
+    X1, Y1 = np.meshgrid(x1, y1)
+
+    rv = multivariate_normal(
+        mean=[0, 0], cov=[[sigma_x**2, 0], [0, sigma_y**2]])
+
+    # ベクトル化した積分境界を構成
+    points_11 = np.stack([X1.ravel(), Y1.ravel()], axis=1)
+    points_10 = np.stack([X1.ravel(), Y0.ravel()], axis=1)
+    points_01 = np.stack([X0.ravel(), Y1.ravel()], axis=1)
+    points_00 = np.stack([X0.ravel(), Y0.ravel()], axis=1)    # CDF差で積分値を計算
+    p = (
+        rv.cdf(points_11) - rv.cdf(points_01)
+        - rv.cdf(points_10) + rv.cdf(points_00)
+    )
+    # 元の格子状に整形
+    print(p.shape)
+    weights = p.reshape(nh2, nh2)
+    return weights
+
+
 def antenna_pattern_integration(integ_time, integ_interval, antenna_func, func_args, rot_velo=40.0):
     '''
     integ_time,integ_interval: mili second
     rot_velo: rpm (the number of rotation/minute)
     This method approximately calculates effective antenna pattern on azimuth and elevation angle plane.
-    Although it is correct to integrate each antenna pattern on earth surface, this process is computationally expensive.
+    Although it is correct to integrate each antenna pattern on earth surface, the process is computationally expensive.
     '''
     itime_list = np.arange(-integ_time / 2, integ_time / 2 +
                            integ_interval, integ_interval) * 10 ** (-3)  # second

@@ -2,6 +2,8 @@ import numpy as np
 from ..fortlib import deblur
 from scipy import signal
 from ..satellite.algorithm import pmw_processor
+from scipy.signal import convolve2d
+from scipy.sparse import lil_matrix
 
 
 def Tikhonov_L2(G, alpha):
@@ -23,6 +25,25 @@ def TruncatedSVD(G, n_elements):
     V = V[:n_elements, :]
     Gg = V.T.dot(Sigma.dot(U.T))
     return Gg
+
+
+def backus_gilbert(ap_s, ap_t, noise, gamma, interval=1, mode="SOLA"):
+    """
+    SOLA: Subtractive Optimally Localized Averages
+    MOLA: Multiplicative Optimally Localized Averages
+    """
+
+    if mode == "SOLA":
+        size_covm = np.eye(ap_s.shape[0], ap_s.shape[0])*noise
+        G = ap_s.dot(ap_s.T)*interval*interval
+        u = np.sum(ap_s, axis=1)*interval*interval
+        v = ap_s.dot(ap_t)*interval*interval
+        Z = G*np.cos(gamma)+size_covm*np.sin(gamma)
+        Zinv = np.linalg.inv(Z)
+        beta = (1-u.T.dot(Zinv.dot(v)*np.cos(gamma)))/(u.T.dot(Zinv.dot(u)))
+        filter = Zinv.dot(v*np.cos(gamma)+beta*u)
+
+    return filter
 
 
 def run_rsir(grid_x, grid_y, mask, ap3, wsize, res, fwhm, w, val, iterate):
@@ -87,8 +108,62 @@ def convert_4DFilter_to_4DInverseFilter(aarray0, nh):
     return ap2
 
 
-def convert_2DFilter_to_4DInverseFilter(aarray0, nh):
+def create_convolution_matrix_from_2DFilter(array0, ratio=1, padding=0, reg=True):
     '''output shape is (point_y,point_x,filter_y,filter_x)'''
+    nh = int((array0.shape[0]-1)/2)
+    nh2 = (nh-padding)*ratio
+    if nh2 % int(nh2) == 0:
+        nh2 = int(nh2)
+        ap2 = np.zeros([nh2*2+1, nh2*2+1, nh*2+1, nh*2+1])
+        for i in range(-nh+padding, nh+1-padding, int(1/ratio)):
+            for j in range(-nh+padding, nh+1-padding, int(1/ratio)):
+                if j > 0:
+                    j_t = (j, 0)
+                else:
+                    j_t = (0, -j)
+                if i > 0:
+                    i_t = (i, 0)
+                else:
+                    i_t = (0, -i)
+                tmp = np.pad(array0[:, :],
+                             pad_width=(j_t, i_t), mode="edge")
+                length, width = tmp.shape
+                if j > 0:
+                    jmin = 0
+                    jmax = length-j
+                else:
+                    jmin = -j
+                    jmax = length
+                if i > 0:
+                    imin = 0
+                    imax = width-i
+                else:
+                    imin = -i
+                    imax = width
+
+                tmp2 = tmp[jmin:jmax, imin:imax]
+                height2, width2 = tmp.shape
+                tmp2[0:jmin, :] = tmp2[0:jmin, :] + \
+                    tmp[0:jmin, imin:imax][::-1, :]
+                tmp2[:, 0:imin] = tmp2[:, 0:imin] + \
+                    tmp[jmin:jmax, 0:imin][:, ::-1]
+                if jmax != height2:
+                    tmp2[-(height2-jmax):, :] = tmp2[-(height2-jmax):, :] + \
+                        tmp[jmax:height2, imin:imax][::-1, :]
+                if imax != width2:
+                    tmp2[:, -(width2-imax):] = tmp2[:, -(width2-imax):] + \
+                        tmp[jmin:jmax, imax:width2][:, ::-1]
+                if reg:
+                    tmp2 = tmp2/np.sum(tmp2)
+                # print(tmp2.shape,int(j/ratio)+nh2,int(i/ratio)+nh2)
+                ap2[int(j*ratio)+nh2, int(i*ratio)+nh2, :, :] = tmp2
+    else:
+        print("ratio should be ajusted.")
+    return ap2.reshape((nh2*2+1)**2, (nh*2+1)**2)
+
+
+def convert_2DFilter_to_4DInverseFilter(aarray0, nh):
+    '''remove!!'''
     ap2 = np.zeros([nh*2+1, nh*2+1, nh*2+1, nh*2+1])
     for i in range(-nh, nh+1, 1):
         for j in range(-nh, nh+1, 1):
@@ -232,3 +307,18 @@ def estimate_resolution(D, smin, smax, sint, metric="rmse"):
         metric_val = corr_max
 
     return fwhm_opt_x, fwhm_opt_y, metric_val, gt
+
+
+def create_convolution_matrix_sparse(G, nh, ratio=1):
+    N = int(nh*2*ratio+1)
+    N2 = nh*2+1
+    A = lil_matrix((N*N, N2*N2))  # 大きさは [H*W, H*W]
+    # 各 unit vector に対する畳み込み結果を A の各行として格納
+    j = 0
+    for i in range(0, N2*N2, int(1/ratio)):
+        unit_img = np.zeros((N2, N2))
+        unit_img[np.unravel_index(i, (N2, N2))] = 1.0
+        conv_result = convolve2d(unit_img, G, mode='same', boundary='wrap')
+        A[j, :] = conv_result.flatten()
+        j = j+1
+    return A.tocsr()
