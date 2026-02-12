@@ -1,12 +1,12 @@
 MODULE PMW_Processor
-USE sensor_geometry
 IMPLICIT NONE
 REAL(4),PARAMETER :: Undef = 9.9E33
 CONTAINS
 
 SUBROUTINE rSIR(grid_x,grid_y,vs,vb,vg,var,mask_grid,out_var,n_grid,nx,ny,wsize,ap,nx_ap,ny_ap,int_ap,res,fwhm,iterate)
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
-IMPLICIT NONE
+USE sensor_geometry
+  IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
 INTEGER :: i2,j2,i3,j3,p,dum
 INTEGER(4),INTENT(IN) :: n_grid,nx,ny,wsize,nx_ap,ny_ap,iterate
@@ -241,7 +241,8 @@ END SUBROUTINE rSIR
 
 SUBROUTINE rSIRvh(grid_x,grid_y,vs,vb,vg,var,mask_grid,out_var,n_grid,nx,ny,nz,wsize,ap,nx_ap,ny_ap,int_ap,res,fwhm,iterate)
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
-IMPLICIT NONE
+USE sensor_geometry
+  IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,grid_i,grid_j,isum
 INTEGER :: i2,j2,i3,j3,p,dum
 INTEGER(4),INTENT(IN) :: n_grid,nx,ny,nz,wsize,nx_ap,ny_ap,iterate
@@ -426,6 +427,7 @@ END SUBROUTINE rSIRvh
 SUBROUTINE rSIR2(grid_x,grid_y,grid_id,vs,vb,vg,var,mask_grid,id1_grid,id2_grid,out_var,&
 n_grid,nx,ny,wsize,ap,nx_ap,ny_ap,int_ap,res,fwhm,iterate)
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
+USE sensor_geometry
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
 INTEGER :: i2,j2,i3,j3,p,dum
@@ -618,6 +620,7 @@ END SUBROUTINE rSIR2
 
 SUBROUTINE rSIR2_vh_fast(grid_x,grid_y,grid_id,ps_angle,ps_scale,var,mask_grid,id1_grid,id2_grid,out_var,&
 n_grid,nx,ny,nz,wsize,ap,nx_ap,ny_ap,int_ap,res,fwhm,iterate)
+USE sensor_geometry
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,grid_i,grid_j,isum
 INTEGER :: i2,j2,i3,j3,p,dum
@@ -800,6 +803,7 @@ END SUBROUTINE rSIR2_vh_fast
 
 SUBROUTINE mart_vh_fast(grid_x,grid_y,grid_id,ps_angle,ps_scale,var,mask_grid,id1_grid,id2_grid,out_var,&
 n_grid,nx,ny,nz,wsize,ap,nx_ap,ny_ap,int_ap,res,fwhm,iterate)
+USE sensor_geometry
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,grid_i,grid_j,isum
 INTEGER :: i2,j2,i3,j3,p,dum
@@ -955,7 +959,8 @@ END SUBROUTINE mart_vh_fast
 
 SUBROUTINE count_rSIR2(grid_x,grid_y,grid_id,mask_grid,id1_grid,id2_grid,out_var,n_grid,nx,ny)
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
-IMPLICIT NONE
+USE sensor_geometry
+  IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
 INTEGER :: i2,j2,i3,j3,p,dum
 INTEGER(4),INTENT(IN) :: n_grid,nx,ny
@@ -1002,7 +1007,8 @@ END SUBROUTINE count_rSIR2
 
 
 subroutine calc_latlon_AMSR2_L1B(lat,lon,olat,olon,imax,jmax,coregiA1,coregiA2)
- implicit none
+ USE sensor_geometry
+  implicit none
  integer :: imax,jmax,oimax,ojmax
  real(4), intent(IN) :: lat(imax,jmax),lon(imax,jmax)
  real(4), intent(OUT) :: olat(imax/2,jmax),olon(imax/2,jmax)

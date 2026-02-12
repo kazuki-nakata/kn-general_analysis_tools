@@ -115,6 +115,7 @@ def create_convolution_matrix_from_2DFilter(array0, ratio=1, padding=0, reg=True
     if nh2 % int(nh2) == 0:
         nh2 = int(nh2)
         ap2 = np.zeros([nh2*2+1, nh2*2+1, nh*2+1, nh*2+1])
+        print(ap2.shape,-nh+padding,nh+1-padding)
         for i in range(-nh+padding, nh+1-padding, int(1/ratio)):
             for j in range(-nh+padding, nh+1-padding, int(1/ratio)):
                 if j > 0:

@@ -1,7 +1,7 @@
 module Numerical_Module
-
-  implicit none
-
+  IMPLICIT NONE
+  INTEGER,PARAMETER :: null = 999
+  REAL(4),PARAMETER :: Undef = 999
 contains
 
 ! subroutine get_inverse_matrix(G, G_inv, N)
@@ -223,5 +223,126 @@ do i=1,1000
 end do
 
 end subroutine get_eigen_value_by_Jacobi
+
+SUBROUTINE Inner_Product(inval,isize2,jsize2,ksize2,inlat,inlon,isize,jsize,ymin,xmin,yint,xint,output)
+   IMPLICIT NONE
+   INTEGER :: i,j,ii,jj,k
+   iNTEGER :: ipos,jpos,ipos2,jpos2
+   REAL(4) :: dx,dy
+   INTEGER(4),INTENT(IN) :: jsize,isize,isize2,jsize2,ksize2
+   REAL(4),INTENT(IN) :: xmin,ymin,xint,yint
+   REAL(4),INTENT(IN) :: inlat(1:isize,1:jsize),inlon(1:isize,1:jsize)
+   REAL(4),INTENT(IN) :: inval(1:ksize2,1:isize2,1:jsize2)
+   REAL(4) :: rlon(1:jsize2),rlat(1:isize2)
+   REAL(4),INTENT(OUT):: output(1:ksize2,1:isize,1:jsize)
+
+   rlon(1:jsize2) = (/ (xmin+xint*(i-1),i=1,jsize2) /)
+   where(rlon > 360.)
+      rlon=rlon-360.
+   endwhere
+   rlat(1:isize2) = (/ (ymin+yint*(i-1),i=1,isize2) /)
+   print *,isize,jsize,isize2,jsize2,xmin,ymin,xint,yint
+   
+   do j = 1, jsize
+      do i = 1, isize
+         jpos=-999
+         do jj = 2, jsize2
+            if((inlon(i,j) > rlon(jj-1)) .and. &
+                  (inlon(i,j) <= rlon(jj))) then
+               jpos=jj
+               jpos2=jj-1
+            endif
+         enddo
+
+
+      enddo
+    enddo
+    
+END SUBROUTINE Inner_Product 
+
+function bilin(dx,dy,Undef,var1,var2,var3,var4)
+  implicit none
+  REAL(4) :: bilin
+  REAL(4),INTENT(in) :: dx, dy, Undef
+  REAL(4),INTENT(in) :: var1,var2,var3,var4
+!   REAL(4),INTENT(in) :: la1,la2,la3,la4
+
+  if((var1 /= Undef) .and. (var2 /= Undef) .and. &
+       & (var3 /= Undef) .and. (var4 /= Undef)) then
+    bilin = (1.-dx)*(1.-dy)*var1 &
+         & +    dx *(1.-dy)*var2 &
+         & +    dx *    dy *var3 &
+         & +(1.-dx)*    dy *var4
+  else
+    bilin = Undef
+  endif
+end function bilin
+
+
+subroutine deming_linear_from_buf(x, y, sx, sy, n, b0, b1)
+  ! 線形 EIV（Deming）の閉形式解。delta = mean(sy^2)/mean(sx^2)
+  implicit none
+  integer(4), intent(in) :: n
+  real(4),    intent(in) :: x(n), y(n), sx(n), sy(n)
+  real(8),    intent(out):: b0, b1
+  integer(4) :: i
+  real(8) :: Ex, Ey, Sxx, Syy, Sxy, vx, vy, delta, D, sxy_eps
+
+  if (n < 2) then
+    b0 = 0.0d0; b1 = 0.0d0; return
+  end if
+
+  Ex = 0.0d0; Ey = 0.0d0; vx = 0.0d0; vy = 0.0d0
+  do i = 1, n
+    Ex = Ex + dble(x(i)); Ey = Ey + dble(y(i))
+    vx = vx + dble(sx(i))**2; vy = vy + dble(sy(i))**2
+  end do
+  Ex = Ex/dble(n); Ey = Ey/dble(n)
+  vx = vx/dble(n); vy = vy/dble(n)
+  delta = vy / (vx + 1.0d-12)
+
+  Sxx = 0.0d0; Syy = 0.0d0; Sxy = 0.0d0
+  do i = 1, n
+    Sxx = Sxx + (dble(x(i))-Ex)**2
+    Syy = Syy + (dble(y(i))-Ey)**2
+    Sxy = Sxy + (dble(x(i))-Ex)*(dble(y(i))-Ey)
+  end do
+  Sxx = Sxx/dble(n); Syy = Syy/dble(n); Sxy = Sxy/dble(n)
+
+  sxy_eps = max(1.0d-12, abs(Sxy))
+  D  = Syy - delta*Sxx
+  b1 = ( D + sqrt( max(0.0d0, D*D + 4.0d0*delta*Sxy*Sxy) ) ) / ( 2.0d0 * sxy_eps ) * sign(1.0d0, Sxy)
+  b0 = Ey - b1*Ex
+end subroutine deming_linear_from_buf
+
+subroutine solve3x3_sym(H, b, x)
+  ! 対称 3×3 の連立をガウス消去で解く（簡易）
+  implicit none
+  real(8), intent(inout) :: H(3,3)
+  real(8), intent(in)    :: b(3)
+  real(8), intent(out)   :: x(3)
+  real(8) :: A(3,3), rhs(3), piv, m
+  integer :: i, j, k
+
+  A = H; rhs = b
+
+  do k = 1, 3
+    piv = A(k,k); if (abs(piv) < 1.0d-18) piv = sign(1.0d-18, piv)
+    do i = k+1, 3
+      m = A(i,k)/piv
+      do j = k, 3
+        A(i,j) = A(i,j) - m*A(k,j)
+      end do
+      rhs(i) = rhs(i) - m*rhs(k)
+    end do
+  end do
+
+  do i = 3, 1, -1
+    piv = A(i,i); if (abs(piv) < 1.0d-18) piv = sign(1.0d-18, piv)
+    x(i) = (rhs(i) - sum( A(i,i+1:3)*x(i+1:3) )) / piv
+  end do
+end subroutine solve3x3_sym
+
+
 
 end module

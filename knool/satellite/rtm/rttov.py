@@ -49,7 +49,6 @@ class Profiles_tool:
 
     def set_profiles_from_obj(self, obj):
         for key in vars(obj).keys():
-
             exec("self.profiles."+key+"=obj."+key)
 
     def confirm_profiles(self):
@@ -98,7 +97,6 @@ class Profiles_tool:
             n1, n2 = data.shape
             output = np.tile(data.reshape((n1, 1, n2)), (1, self.nsurfaces, 1))
         return output
-
 
 class RTTOV_tools:
     def __init__(self, nprofiles, nlevels, nsurfaces, conf, coefs, sens="mw"):

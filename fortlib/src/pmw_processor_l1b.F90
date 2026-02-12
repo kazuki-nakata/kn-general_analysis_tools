@@ -1,5 +1,4 @@
 MODULE PMW_Processor_L1B
-USE sensor_geometry
 IMPLICIT NONE
 INTEGER(4),PARAMETER :: null = -32767
 REAL(4),PARAMETER :: Undef = 9.9E33
@@ -9,6 +8,7 @@ CONTAINS
 SUBROUTINE rSIR(grid_x,grid_y,vs,vb,vg,var,mask_grid,var_init,out_var,&
 n_grid,nx,ny,wsize,ap,nx_ap,ny_ap,int_ap,window_radius,iterate)
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
+USE sensor_geometry
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
 INTEGER :: i2,j2,i3,j3,p,dum
@@ -136,6 +136,7 @@ END SUBROUTINE rSIR
 
 SUBROUTINE Banach_gradient(grid_x,grid_y,vs,vb,vg,var,mask_grid,var_init,out_var,&
 n_grid,nx,ny,wsize,ap,nx_ap,ny_ap,int_ap,window_radius,w,w2,iterate)
+USE sensor_geometry
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
@@ -273,6 +274,7 @@ end subroutine duality_map
 
 SUBROUTINE get_antenna_pattern_matrix(grid_x,grid_y,vs,vb,vg,out_var,&
 n_grid,nx,ny,nx_w,ny_w,ap,nx_ap,ny_ap,int_ap)
+USE sensor_geometry
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
@@ -343,6 +345,7 @@ END SUBROUTINE get_antenna_pattern_matrix
 
 SUBROUTINE get_antenna_pattern_matrix2(grid_x,grid_y,vs,vb,vg,out_var,&
 n_grid,nx,ny,nx_w,ny_w,xmins,xmaxs,wn,ymin,ymax,ap,nx_ap,ny_ap,int_ap)
+USE sensor_geometry
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
@@ -433,6 +436,7 @@ enddo
 END SUBROUTINE get_antenna_pattern_matrix2
 
 SUBROUTINE filter_type1(var,fil,out_var,nx,ny,nx_w,ny_w)
+  USE sensor_geometry
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,mx,my
 INTEGER :: i2,j2,i3,j3
@@ -468,8 +472,43 @@ out_var(:,:)=0
 
 END SUBROUTINE filter_type1
 
+SUBROUTINE filter_type2(var,target_ix,num_line,ix,iy,fil,out_var,nx,nx2,ny,nxy_w)
+  USE sensor_geometry
+IMPLICIT NONE
+INTEGER :: i,ii,j,jj,k,mx,my
+INTEGER :: i2,j2,i3,j3,nxy_w2
+INTEGER(4),INTENT(IN):: nx,ny,nxy_w,nx2
+INTEGER(4),INTENT(IN),DIMENSION(1:nx2):: target_ix
+INTEGER(4),INTENT(IN),DIMENSION(1:nx2):: num_line
+REAL(8),INTENT(IN),DIMENSION(1:nxy_w,1:nx2):: fil
+INTEGER(4),INTENT(IN),DIMENSION(1:nxy_w,1:nx2):: ix
+INTEGER(4),INTENT(IN),DIMENSION(1:nxy_w,1:nx2):: iy
+REAL(8),INTENT(IN),DIMENSION(1:nx, 1:ny):: var
+REAL(8),INTENT(OUT),DIMENSION(1:nx2, 1:ny):: out_var
+REAL(8) :: asum,var_sum
+
+print *, "image nx=",nx,",","ny=",ny
+print *,nxy_w,nx2
+out_var(:,:)=0
+
+    do k =1, nx2
+      i=target_ix(k)
+      nxy_w2=num_line(k)
+      do j = 1, ny
+      do jj=1,nxy_w2
+        i2=ix(jj,k)
+        j2=j+iy(jj,k)
+        if((j2.le.0).or.(j2.gt.ny)) cycle
+        if((i2.le.0).or.(i2.gt.nx)) cycle
+        out_var(k,j)=var(i2,j2)*fil(jj,k)+out_var(k,j)
+      enddo
+    enddo
+    enddo
+
+END SUBROUTINE filter_type2
 
 SUBROUTINE init_conv(grid_x,grid_y,vs,vb,vg,var,mask_grid,out_var,n_grid,nx,ny,wsize,ap,nx_ap,ny_ap,int_ap)
+USE sensor_geometry
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
@@ -562,6 +601,7 @@ END SUBROUTINE init_conv
 
 
 SUBROUTINE test(grid_x,grid_y,val,out_var,n_grid,map,nx,ny)
+USE sensor_geometry
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
 IMPLICIT NONE
 INTEGER :: i,j,k

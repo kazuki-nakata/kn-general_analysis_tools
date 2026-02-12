@@ -25,15 +25,27 @@ class TLEsPerSat:
         edate = edate0.replace(tzinfo=utc)
         self.df = self.df0[(self.df0.index > sdate) & (self.df0.index < edate)]
 
-    def _get_position(self, num, date_sf):
+    def _get_position(self, num, date_sf,latlon=True):
         geocentric = self.tles[num].at(date_sf)
-        subpoint = geocentric.subpoint()
-        lat = subpoint.latitude.degrees
-        lon = subpoint.longitude.degrees
-        ele = subpoint.elevation.m
-        return lat, lon, ele
+        if latlon:
+            subpoint = geocentric.subpoint()
+            x = subpoint.latitude.degrees
+            y = subpoint.longitude.degrees
+            z = subpoint.elevation.m
+        else:
+            pos = geocentric.position.m
+            x=pos[0]
+            y=pos[1]
+            z=pos[2]            
+        return x,y,z
 
-    def calc_position_at(self, date):
+    def get_nearest_tle_num(self, date):
+        df = self.df
+        row1 = df.loc[df.index == df.index.unique()[df.index.unique(
+        ).get_indexer([pd.to_datetime(date)], method="nearest")[0]]]
+        return row1.num.values[0]
+
+    def calc_position_at(self, date, latlon=True):
         # input:
         # date: datetime object -> e.g., dt(2018, 2, 1, 12, 15, 30, 2000, tzinfo=utc)
         df = self.df
@@ -41,7 +53,7 @@ class TLEsPerSat:
         ).get_indexer([pd.to_datetime(date)], method="nearest")[0]]]
         date1_sf = load.timescale().from_datetime(date)
         num = row1.num.values[0]
-        return self._get_position(num, date1_sf)
+        return self._get_position(num, date1_sf,latlon=latlon)
 
     def calc_positions_between(self, fdate, ldate, interval):
         # input:

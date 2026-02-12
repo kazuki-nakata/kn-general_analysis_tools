@@ -58,8 +58,6 @@ def horn_schunck(Ix, Iy, It, alpha=1.0, num_iterations=100):
     return u, v
 
 
-# Horn-Schunck法の実装
-
 
 def horn_schunck_two_variables(Ix1, Iy1, It1, Ix2, Iy2, It2, alpha=1.0, num_iterations=100):
     u = np.zeros(Ix1.shape)

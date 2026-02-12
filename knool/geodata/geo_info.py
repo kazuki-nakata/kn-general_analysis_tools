@@ -2,6 +2,7 @@ import os
 from osgeo import osr, ogr, gdal
 import numpy as np
 from . import geo_transform, geo_info
+from datetime import datetime, timedelta, timezone
 
 
 def get_stereographic_proj4(lat0, lon0, false_e, false_n, lat_ts):
@@ -395,6 +396,420 @@ def transform_lla_to_rotated_enu(lat0, lon0, eaz, lat, lon):  # eaz: Earth Azimu
     q2 = np.cos(rad) * q + np.sin(rad) * p
     p2 = np.cos(rad) * p - np.sin(rad) * q
     return p2, q2, r
+
+def get_satellite_local_frame_basis(r1, v1, mode="LVLH"):
+    """
+    r1, v1: shape (3, n)  (each column is one sample)
+    mode: LVLH/RTN or VNC/VNR
+    Returns
+      E: shape (3, 3, n)  where E[:, :, i] is the basis matrix for sample i
+         (rows are ex/ey/ez for LVLH or eV/eN/eR for VNR)
+    """
+
+    if mode == "LVLH":
+        R = r1 / np.linalg.norm(r1, axis=0)
+        H = np.cross(r1, v1, axis=0)
+        N = H / np.linalg.norm(H, axis=0)
+        T = np.cross(N, R, axis=0)
+        T /= np.linalg.norm(T, axis=0)
+        N = np.cross(R, T, axis=0)
+        N /= np.linalg.norm(N, axis=0)
+        E = np.stack([T, N, R], axis=0)
+    # if mode == "LVLH":
+    #     n_r1 = np.linalg.norm(r1, axis=0)
+    #     ez = r1 / n_r1 
+
+    #     # v_perp = v1 - (v1·ez) ez
+    #     dot_v_ez = np.sum(v1 * ez, axis=0)
+    #     v_perp = v1 - ez * dot_v_ez
+
+    #     n_vp = np.linalg.norm(v_perp, axis=0)
+    #     ex = v_perp / n_vp
+
+    #     ey = np.cross(ez, ex, axis=0)
+    #     n_ey = np.linalg.norm(ey, axis=0) 
+    #     ey = ey / n_ey 
+
+    #     E = np.stack([ex, ey, ez], axis=0)
+
+    elif mode == "VNC":
+        nv = np.linalg.norm(v1, axis=0)
+        eV = v1 / nv
+
+        h = np.cross(r1, v1, axis=0)
+        nh = np.linalg.norm(h, axis=0)
+        eN = h / nh
+
+        eR = np.cross(eV, eN, axis=0)
+        nR = np.linalg.norm(eR, axis=0) 
+        eR = eR / nR 
+
+        # re-orthonormalize N to keep right-handedness
+        eN = np.cross(eR, eV, axis=0)
+        eN /= np.linalg.norm(eN, axis=0)
+
+        E = np.stack([eV, eN, eR], axis=0) 
+
+    return E
+
+def transform_earth_to_satellite_local_frame(r1, v1, r2, mode, origin_at_satellite=True):
+    """
+    r1, v1, r2: array-like shape (3,)
+      r1 = (3,n) satellite position in ECEF/ECI
+      v1 = (3,n) satellite velocity in ECEF/ECI
+      r2 = (3,n,m) target position in ECEF/ECI
+    mode: LVLH/RTN or VNC/VNR
+    origin:
+      True  -> use d = r2 - r1 (typical "projection into satellite local frame")
+      False -> use d = r2      (coordinates w.r.t. Earth center but expressed in the sat frame axes)
+    Returns:
+      p : (3,)  = (X,Y,Z) components in satellite local frame
+      E : (3,3) = basis matrix whose rows are (ex, ey, ez)
+    """
+    E=get_satellite_local_frame_basis(r1,v1,mode)
+    d = (r2 - r1[:, :, None]) if origin_at_satellite else r2
+    p = np.einsum('abn,bnm->anm', E, d)
+    return p, E
+
+def transform_satellite_local_frame_to_earth(r1, v1, r2, mode, origin_at_satellite=True):
+    """
+    r1, v1, r2: array-like shape (3,)
+      r1 = (3,n) satellite position in ECEF/ECI
+      v1 = (3,n) satellite velocity in ECEF/ECI
+      r2 = (3,n,m) target position in ECEF/ECI
+    mode: LVLH/RTN or VNC/VNR
+    origin:
+      True  -> use d = r2 - r1 (typical "projection into satellite local frame")
+      False -> use d = r2      (coordinates w.r.t. Earth center but expressed in the sat frame axes)
+    Returns:
+      p : (3,)  = (X,Y,Z) components in satellite local frame
+      E : (3,3) = basis matrix whose rows are (ex, ey, ez)
+    """
+    E=geo_info.get_satellite_local_frame_basis(r1,v1,mode)
+    Einv = np.transpose(E, (1, 0, 2)) 
+    p = np.einsum('ijn,jnm->inm', Einv, r2)
+    p = (r1[:, :, None] + p) if origin_at_satellite else p
+    return p, Einv
+
+
+def transform_ecef_to_eci(r, t):
+    """
+    ECEF -> ECI (GMST-only) using numpy.
+
+    Parameters
+    ----------
+    r :  (3,N,M)
+        ECEF position vectors [same unit]
+    times :datetime, shape (N)
+        UTC datetimes for each vector
+    """
+    N = r.shape[1]
+
+    theta = _gmst_rad_from_datetimes(t)
+    c = np.cos(theta).reshape(N, 1)
+    s = np.sin(theta).reshape(N, 1)
+
+    x, y, z = r[0], r[1], r[2]
+    x_eci = c * x - s * y
+    y_eci = s * x + c * y
+    z_eci = z
+
+    out = np.stack([x_eci, y_eci, z_eci], axis=0)
+    return out
+
+
+def transform_eci_to_ecef(r, times):
+    """
+    ECI -> ECEF (GMST-only) using numpy.
+
+    Parameters
+    ----------
+    r :  (3,N,M)
+        ECI position vectors [same unit]
+    times :datetime, shape (N)
+        UTC datetimes for each vector
+    """
+    N = r.shape[1]
+
+    theta = _gmst_rad_from_datetimes(times)
+    c = np.cos(theta).reshape(N, 1)
+    s = np.sin(theta).reshape(N, 1)
+
+    x, y, z = r[0], r[1], r[2]
+    # ECEF = Rz(-theta) * ECI
+    x_ecef = c * x + s * y
+    y_ecef = -s * x + c * y
+    z_ecef = z
+
+    out = np.stack([x_ecef, y_ecef, z_ecef], axis=0)
+    return out
+
+def transform_ecef_to_eci_posvel(r, v, times, OMEGA_EARTH = 7.2921150e-5):
+    """
+    r: (3,N,M)  ECEF position
+    v: (3,N,M)  ECEF velocity (time-derivative in ECEF)
+    times: datetime array (N,)
+    # Earth rotation rate rad/s
+
+    return:
+      r_eci: (3,N,M)
+      v_eci: (3,N,M)
+    """
+    N = r.shape[1]
+
+    # Earth rotation rate
+    omega = np.array([0.0, 0.0, OMEGA_EARTH], dtype=np.float64).reshape(3, 1, 1)
+
+    theta = _gmst_rad_from_datetimes(times)  # (N,)
+    c = np.cos(theta).reshape(N, 1)       # (N,1)
+    s = np.sin(theta).reshape(N, 1)       # (N,1)
+
+    x, y, z = r[0], r[1], r[2]  # each (N,M)
+    r_eci = np.empty_like(r)
+    r_eci[0] = c * x - s * y
+    r_eci[1] = s * x + c * y
+    r_eci[2] = z
+
+    vx, vy, vz = v[0], v[1], v[2]
+    v_rot = np.empty_like(v)
+    v_rot[0] = c * vx - s * vy
+    v_rot[1] = s * vx + c * vy
+    v_rot[2] = vz
+
+    # v_eci = R v_ecef + omega × r_eci
+    omega_cross_r = np.cross(omega, r_eci, axisa=0, axisb=0, axisc=0)  # (3,N,M)
+    v_eci = v_rot + omega_cross_r
+
+    return r_eci, v_eci
+
+
+def transform_eci_to_ecef_posvel(r, v, times, OMEGA_EARTH = 7.2921150e-5):
+    """
+    r: (3,N,M)  ECI position
+    v: (3,N,M)  ECI velocity (time-derivative in ECEF)
+    times: datetime array (N,)
+    # Earth rotation rate rad/s
+    return:
+      r_eci: (3,N,M)
+      v_eci: (3,N,M)
+    """
+    N = r.shape[1]
+
+      # rad/s
+    omega = np.array([0.0, 0.0, OMEGA_EARTH], dtype=np.float64).reshape(3, 1, 1)
+
+    theta = _gmst_rad_from_datetimes(times)  # (N,)
+    c = np.cos(theta).reshape(N, 1)       # (N,1)
+    s = np.sin(theta).reshape(N, 1)       # (N,1)
+
+    x, y, z = r[0], r[1], r[2]  # each (N,M)
+    r_ecef = np.empty_like(r)
+    r_ecef[0] = c * x + s * y
+    r_ecef[1] = - s * x + c * y
+    r_ecef[2] = z
+
+
+    # v_eci = R v_ecef + omega × r_eci
+    omega_cross_r = np.cross(omega, r, axisa=0, axisb=0, axisc=0)  # (3,N,M)
+    v_dum = v - omega_cross_r
+    vx, vy, vz = v_dum[0], v_dum[1], v_dum[2]
+    v_ecef = np.empty_like(v)
+    v_ecef[0] = c * vx + s * vy
+    v_ecef[1] = - s * vx + c * vy
+    v_ecef[2] = vz
+
+
+    return r_ecef, v_ecef
+
+
+def intersect_ray_ellipsoid_ecef(sp_ecef, d_ecef, a=6378137.0, b=6356752.314245, eps=1e-12):
+    """
+    Ray-ellipsoid intersection in ECEF.
+
+    Inputs
+    ------
+    sp_ecef : array-like, shape (3,N)
+        Satellite position in ECEF [m]
+    d_ecef : array-like, shape (3,N)
+        Line-of-sight unit vector in ECEF
+        Ray is r(t) = r_sat + t * d_hat, t>=0
+    a, b : float
+        Ellipsoid semi-major and semi-minor axes [m]
+        Ellipsoid: (x^2+y^2)/a^2 + z^2/b^2 = 1
+
+    Returns
+    -------
+    r_gnd_ecef : ndarray, shape (3,N)
+        Intersection point on ellipsoid in ECEF [m]
+    t : float
+        Range parameter [m] along the ray
+    """
+
+    ax2 = a * a
+    bz2 = b * b
+
+    xs, ys, zs = sp_ecef
+    dx, dy, dz = d_ecef
+
+    A = (dx*dx + dy*dy) / ax2 + (dz*dz) / bz2
+    B = 2.0 * ((xs*dx + ys*dy) / ax2 + (zs*dz) / bz2)
+    C = (xs*xs + ys*ys) / ax2 + (zs*zs) / bz2 - 1.0
+
+    D = B*B - 4.0*A*C
+
+    sqrtD = np.sqrt(D)
+
+    # # Two solutions
+    t1 = (-B - sqrtD) / (2.0*A)
+    t2 = (-B + sqrtD) / (2.0*A)
+
+    # # We need the nearest intersection in front of the satellite (t>=0)
+    ts= np.array([t1,t2])
+
+    t = np.min(ts,axis=0)
+
+    r_gnd = sp_ecef + t * d_ecef
+    return r_gnd,t
+
+
+def _to_unix_seconds_utc(dt):
+    """datetime -> unix seconds (UTC). naiveはUTC扱い。"""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.timestamp()
+
+def _gmst_rad_from_datetimes(times):
+    """
+    GMST angle [rad] from datetime array (UTC).
+    Vallado等でよく使われる近似式（UT1差・極運動・歳差章動は無視）。
+    """
+    times = np.asarray(times, dtype=object)
+    unix = np.array([_to_unix_seconds_utc(t) for t in times], dtype=np.float64)
+
+    # Unix epoch -> Julian Date
+    JD = 2440587.5 + unix / 86400.0
+    T = (JD - 2451545.0) / 36525.0
+
+    # GMST in degrees
+    gmst_deg = (280.46061837
+                + 360.98564736629 * (JD - 2451545.0)
+                + 0.000387933 * T**2
+                - (T**3) / 38710000.0)
+
+    theta = np.deg2rad(np.mod(gmst_deg, 360.0))
+    return theta
+
+def get_Rx(phi):
+    c, s = np.cos(phi), np.sin(phi)
+    return np.array([[1,0,0],[0,c,-s],[0,s,c]])
+
+def get_Ry(theta):
+    c, s = np.cos(theta), np.sin(theta)
+    return np.array([[c,0,s],[0,1,0],[-s,0,c]])
+
+def get_Rz(psi):
+    c, s = np.cos(psi), np.sin(psi)
+    return np.array([[c,-s,0],[s,c,0],[0,0,1]])
+
+def get_transform_matrix(roll, pitch, yaw, order="ZYX"):
+    """
+    roll, pitch, yaw: radians
+    order="ZYX" means: R = Rz(yaw) @ Ry(pitch) @ Rx(roll)
+    This returns R_{b<-l} if angles are defined as body rotation relative to LVLH.
+    """
+    if order == "ZYX":
+        return get_Rz(yaw) @ get_Ry(pitch) @ get_Rx(roll)
+    elif order == "XYZ":
+        return get_Rx(roll) @ get_Ry(pitch) @ get_Rz(yaw)
+    else:
+        raise ValueError("unsupported order")
+
+def transform_ecef2eci2sat2sens(gp,sp,sv,ot,roll,pich,yaw):
+    gp_eci=transform_ecef_to_eci(gp, ot)
+    sp, sv =transform_ecef_to_eci_posvel(sp[:,:,None], sv[:,:,None], ot)
+    sp=sp[:,:,0]
+    sv=sv[:,:,0]
+    gp_sat,E=transform_earth_to_satellite_local_frame(sp,sv,gp_eci,mode="LVLH")
+    Rbl = get_transform_matrix(roll, pich, yaw, order="ZYX")
+    gp_sens=np.einsum("ji,ikl->jkl", Rbl, gp_sat)
+    return gp_sens
+
+def transform_sens2sat2eci2ecef(gp_sens,sp,sv,ot,roll,pich,yaw,stype="eci"):
+    Rbl = get_transform_matrix(roll, pich, yaw, order="ZYX")
+    Rbl = np.linalg.inv(Rbl)
+    gp_sat=np.einsum("ji,ikl->jkl", Rbl, gp_sens)
+    if stype=="ecef":
+        sp, sv =transform_ecef_to_eci_posvel(sp[:,:,None], sv[:,:,None], ot)
+        sp=sp[:,:,0]
+        sv=sv[:,:,0]
+    gp_eci,E=transform_satellite_local_frame_to_earth(sp,sv,gp_sat,mode="LVLH")
+    gp_ecef=transform_eci_to_ecef(gp_eci, ot)
+    return gp_ecef
+
+def calc_orbit_normal_from_inc_raan(inc_rad, raan_rad):
+    si, ci = np.sin(inc_rad), np.cos(inc_rad)
+    sO, cO = np.sin(raan_rad), np.cos(raan_rad)
+    h = np.array([si * sO, -si * cO, ci], dtype=float)
+    h = h/np.linalg.norm(h)
+    return h
+
+def simulate_orbit_nav_from_circular_eci(dtimes, sp0_eci, v_mean, r_orbit, inc_deg=98.8, raan_deg=0.0):
+    """
+    Inputs:
+      times: array-like [s]
+      t0: float [s]
+      r0_eci: (3,) initial position at t0 in ECI [m] (should be consistent with the chosen plane)
+      v_mean: mean speed [m/s]
+      r_orbit: orbit radius [m]
+      inc_deg: inclination [deg] (98 deg)
+      raan_deg: RAAN Ω [deg] (choose 0 if you don't care)
+
+    Returns:
+      r_eci: (3, N) positions in ECI [m]
+    """
+    inc = np.deg2rad(inc_deg)
+    raan = np.deg2rad(raan_deg)
+    n = v_mean / r_orbit
+    theta = n * dtimes  # (N,)
+    h_hat = calc_orbit_normal_from_inc_raan(inc, raan)
+
+    # Build in-plane basis from r0 and h_hat
+    p_hat = sp0_eci/np.linalg.norm(sp0_eci,axis=0)
+    q_hat = np.cross(h_hat, p_hat, axisa=0, axisb=0, axisc=0)
+    q_hat = q_hat/np.linalg.norm(q_hat,axis=0)
+
+    c = np.cos(theta)
+    s = np.sin(theta)
+    r_eci = r_orbit * (p_hat[:, None] * c[None, :] + q_hat[:, None] * s[None, :])
+    v_eci = (r_orbit * n) * (-p_hat[:, None] * s[None, :] + q_hat[:, None] * c[None, :])
+    return r_eci,v_eci
+
+
+def get_raan_from_sp_and_inc(r0_eci, inc_rad, eps=1e-12):
+    """
+    Solve RAAN Ω such that the orbit plane with inclination inc passes through r0:
+        h_hat(inc,Ω) · r0 = 0
+    Returns two solutions (Ω1, Ω2) in radians.
+    """
+    x0, y0, z0 = np.asarray(r0_eci, dtype=float).reshape(3,)
+    Rxy = np.hypot(x0, y0)
+
+    si, ci = np.sin(inc_rad), np.cos(inc_rad)
+
+    lam = np.arctan2(y0, x0)
+    s = -(ci * z0) / (si * Rxy)
+    s = np.clip(s, -1.0, 1.0)
+
+    alpha = np.arcsin(s)
+    Omega1 = lam + alpha
+    Omega2 = lam + (np.pi - alpha)
+
+    # Normalize to [-pi, pi)
+    Omega1 = (Omega1 + np.pi) % (2*np.pi) - np.pi
+    Omega2 = (Omega2 + np.pi) % (2*np.pi) - np.pi
+    return Omega1, Omega2
 
 
 def geodetic_to_geocentric_latitude(gdlat0, h=0, a=6378137.0, b=6356752.314245):

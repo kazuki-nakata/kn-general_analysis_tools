@@ -1,5 +1,4 @@
 MODULE grid_data
-USE sensor_geometry
 IMPLICIT NONE
 INTEGER(4),PARAMETER :: null = -32767
 REAL(4),PARAMETER :: Undef = 9.9E33
@@ -351,6 +350,7 @@ end function bilin
 SUBROUTINE weighted_mean_sat(grid_x,grid_y,vs,vb,vg,val,mask_grid,out_val,n_grid,nx,ny,&
 wsize,ap,nx_ap,ny_ap,int_ap,res,sigma,rm_outer)
 !vs,vb,vg: ecef vector for s/c, obs_point(boresight), and obs_point()
+USE sensor_geometry
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
 INTEGER :: i2,j2,i3,j3,p,dum

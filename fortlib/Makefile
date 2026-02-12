@@ -13,7 +13,9 @@ MODS = $(SRCDIR)*.mod
 TARGET = fortlib
 LIB  = lib$(TARGET).a
 
-MAIN = sentinel1_decorder.F90 numerical_module.F90 segmentation.F90 filter.F90 similarity.F90 coregistration.F90 sensor_geometry.F90 grid_data.F90 point_data.F90 pmw_processor.F90 pmw_processor_l1b.F90 deblur.F90
+MAIN = sentinel1_decorder.F90 numerical_module.F90 stats_utils.F90 segmentation.F90 filter.F90 similarity.F90 coregistration.F90 calc.F90
+MAIN += sensor_geometry.F90 grid_data.F90 point_data.F90 pmw_processor.F90 pmw_processor_l1b.F90 deblur.F90
+#MAIN = sentinel1_decorder.F90 sensor_geometry.F90 numerical_module.F90 segmentation.F90 filter.F90 similarity.F90 coregistration.F90 grid_data.F90 point_data.F90 pmw_processor.F90 pmw_processor_l1b.F90 deblur.F90
 SUB = sort.o object_module.o #numerical_module.o#pmw_processor.o #filter.o
 
 MAINOBJS = $(addprefix $(SRCDIR), $(MAIN))

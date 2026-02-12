@@ -1,5 +1,4 @@
 MODULE point_data
-USE sensor_geometry
 IMPLICIT NONE
 INTEGER(4),PARAMETER :: null = -32767
 REAL(4),PARAMETER :: Undef = 9.9E33
@@ -8,6 +7,7 @@ CONTAINS
 
 SUBROUTINE weighted_mean_sigma(grid_x,grid_y,val,grid_xo,grid_yo,out_val,nx,ny,n_grid,n_grid_o,wsize,sigma_p)
 !WA: weighted averaging
+USE sensor_geometry
 IMPLICIT NONE
 INTEGER :: i,ii,j,jj,k,kk,l,nz,grid_i,grid_j,isum
 INTEGER :: i2,j2,i3,j3,p,dum

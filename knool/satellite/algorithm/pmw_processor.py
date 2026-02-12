@@ -14,6 +14,123 @@ from scipy.stats import multivariate_normal
 from scipy.signal import convolve2d
 
 
+def transform_scsgi_to_gxy(iarray, jarray, dist, offnadir, angle, ydist, xnum):
+    "scsig: simple conical scan geometry index, gxy: global xy"
+    unit_rad = angle/xnum
+    radius = dist * np.sin(np.radians(offnadir))
+    theta = np.radians(iarray*unit_rad)
+    x2 = radius*np.sin(theta)
+    y2 = radius*np.cos(theta)+jarray*ydist
+    return x2, y2
+
+
+def transform_scsgi_to_lxy(iarray, jarray, dist, offnadir, angle, ydist, xnum, base_i, base_j):
+    "scsig: simple conical scan geometry index, lxy: local xy"
+    radius = dist * np.sin(np.radians(offnadir))
+    shape = iarray.shape
+    x2, y2 = transform_scsgi_to_gxy(
+        iarray, jarray, dist, offnadir, angle, ydist, xnum)
+    bx, by = transform_scsgi_to_gxy(
+        base_i, base_j, dist, offnadir, angle, ydist, xnum)
+    dr = np.array([(x2-bx).reshape(-1), (y2-by).reshape(-1)])
+    unit_rad = angle/xnum
+    base_theta = np.radians(base_i*unit_rad)
+    trans_x = np.array([np.cos(base_theta), -np.sin(base_theta)])
+    trans_y = np.array([np.sin(base_theta), np.cos(base_theta)])
+
+    x3 = trans_x.T.dot(dr).reshape(shape)
+    y3 = trans_y.T.dot(dr).reshape(shape)
+    return x3, y3
+
+
+def transform_csgi_to_gxy(iarray, jarray, dist, offnadir, orb_i, angle, rpm, v_sat, xnum, earth_rot=True):
+    """
+    衛星進行方向をy方向とした時の投影座標。
+    """
+    omega = 7.2921e-5  # rad/s
+    R_earth = 6371      # km
+    radius = dist * np.sin(np.radians(offnadir))
+    theta = np.radians(iarray*angle/xnum)
+    scan_rate = rpm / 60
+    dt_obs = (1/scan_rate)/(xnum*360/angle)
+    t_ij = (jarray*xnum*360/angle+iarray) * dt_obs
+    if earth_rot:
+        x_rot = - R_earth * omega * t_ij * np.sin(np.radians(orb_i))
+        y_rot = - R_earth * omega * t_ij * np.cos(np.radians(orb_i))
+    else:
+        x_rot = 0
+        y_rot = 0
+
+    x_scan = radius * np.sin(theta)
+    y_scan = radius * np.cos(theta)
+    y_sat = v_sat * t_ij
+
+    x = x_scan + x_rot
+    y = y_scan + y_sat + y_rot
+    return x, y
+
+
+def transform_csgi_to_lxy(iarray, jarray, dist, offnadir, orb_i, angle, rpm, v_sat, xnum, base_i, base_j):
+    "scsig: simple conical scan geometry index, lxy: local xy"
+    omega = 7.2921e-5  # rad/s
+    R_earth = 6371      # km
+    shape = iarray.shape
+    scan_rate = rpm / 60
+    radius = dist * np.sin(np.radians(offnadir))
+    unit_rad = np.radians(angle/xnum)
+    base_theta = base_i*unit_rad
+    dt_obs = (1/scan_rate)/(xnum*360/angle)
+
+    x2, y2 = transform_csgi_to_gxy(
+        iarray, jarray, dist, offnadir, orb_i, angle, rpm, v_sat, xnum, earth_rot=True)
+    bx, by = transform_csgi_to_gxy(
+        base_i, base_j, dist, offnadir, orb_i, angle, rpm, v_sat, xnum, earth_rot=True)
+    dr = np.array([(x2-bx).reshape(-1), (y2-by).reshape(-1)])
+
+    trans_x = np.array([radius*np.cos(base_theta)-dt_obs/unit_rad*(R_earth * omega * np.sin(np.radians(orb_i))),
+                        -radius*np.sin(base_theta)+dt_obs/unit_rad*(v_sat - R_earth * omega * np.cos(np.radians(orb_i)))])
+    trans_x = trans_x/np.sqrt(np.sum(trans_x**2))
+    trans_y = np.array([-trans_x[1], trans_x[0]])
+
+    x3 = trans_x.T.dot(dr).reshape(shape)
+    y3 = trans_y.T.dot(dr).reshape(shape)
+    return x3, y3
+
+
+def get_middle_xpoint_scscg(jvec, base_i, base_j, dist, offnadir, angle, ydist, xnum):
+    if type(base_i).__module__ != "numpy":
+        base_i = np.array([base_i])
+    jvec = np.asarray(jvec)  # shape: (n,)
+    base_i = np.asarray(base_i)  # shape: (m,)
+    radius = dist * np.sin(np.radians(offnadir))
+    unit_rad = np.radians(angle / xnum)
+    theta = base_i * unit_rad  # shape: (m,)
+    theta = theta[np.newaxis, :]  # shape: (1, m)
+
+    j_diff = (jvec[:, np.newaxis] - base_j)  # shape: (n, 1)
+    arcsin_arg = ydist * j_diff * np.sin(theta) / radius  # shape: (n, m)
+    ivec = base_i + (180 / np.pi) * xnum / angle * \
+        np.arcsin(arcsin_arg)  # shape: (n, m)
+
+    return ivec  # shape: (n, m)
+
+
+def get_window_yradius_scscg(wsize, base_i, dist, offnadir, angle, ydist, xnum):
+    if type(base_i).__module__ != "numpy":
+        base_i = np.array([base_i])
+    base_i = np.asarray(base_i)  # shape: (m,)
+    radius = dist * np.sin(np.radians(offnadir))
+    unit_rad = np.radians(angle / xnum)
+    theta = base_i * unit_rad  # shape: (m,)
+    theta = theta[np.newaxis, :]  # shape: (1, m)
+    C = ydist**2
+    D = -2*(radius-wsize)*np.cos(theta)*ydist
+    E = wsize**2-2*radius*wsize
+    F = (D**2 - 4*C*E) ** (1/2)
+    j2 = (-D - F) / (2 * C)
+    return np.abs(j2)
+
+
 def calc_TBD_TBU_Tau(wv, ts, clw, eaz, freq_list=["6.9GHz", "18.7GHz", "23.8GHz", "36.5GHz", "89.0GHz"]):
     '''
     bulk formula from Wentz (2000) simple RTM
@@ -311,7 +428,7 @@ def interpolation(latb, lonb, imgb, imgb_ij, lata, lona, sp, imga_ij, ap, offset
 
 def interpolation_89G_AB0(latb, lonb, tbb, lata, lona, spa, epsg, range_x=3, range_y=3, res=12000):
     """
-    will be remove.
+    will be removed.
     For polar region, input epsg is set to 3413:arctic, 3976:antarctic
     coord index calculated from the identified epsg is only used for finding a neighborhood pixel.
     """

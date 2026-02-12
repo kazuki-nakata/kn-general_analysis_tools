@@ -147,19 +147,6 @@ class AMSR2_L1B:
         self.lon = lon[self.clip_array]
         self.length, self.width = self.lat.shape
 
-    def get_1d_datetime(self):
-        st = self.startTime_split
-        et = self.endTime_split
-        if st is None:
-            print("Run set_lat_range function before get_obs_time.")
-        else:
-            length = self.length
-            width = self.width
-            grad = (et - st).seconds / 60 / 60 / 24 / (length - 1)
-            date_list = [st + timedelta(days=grad * i) for i in range(length)]
-            time_array = np.array(date_list)
-        return time_array
-
     def get_obs_time(self):
         """
         Export obs. time (jday-1 + hour/24+minute/24/60+second/60/60/24). Note the part of [jday-1]
@@ -182,7 +169,6 @@ class AMSR2_L1B:
             )
             time_array = np.tile(time_array, (width, 1)).T
         return time_array
-
 
     def get_subds(self, subdsID):
         ds = gdal.Open(self.ds.GetSubDatasets()[subdsID][0], gdal.GA_ReadOnly)
@@ -210,17 +196,12 @@ class AMSR2_L1B:
             self.clip_array]
         return nav
 
-    def get_attitude_data(self):
-        att = self.get_subds(self.subdsID["Attitude_Data"]).ReadAsArray()[
-            self.clip_array]
-        return att
-
     def get_satellite_position(self):
         """格納されている位置データはスキャン開始時刻のもの。それをスキャン方向に内挿するメソッド。"""
         sp0 = self.get_subds(self.subdsID["Navigation_Data"]).ReadAsArray()[
             self.clip_array, 0:3]
         sp0 = np.append(sp0, np.array([(sp0[-1] - sp0[-2]) + sp0[-1]]), axis=0)
-        sp = np.array([(sp0[1:] - sp0[0:-1])*150/360 * i / self.width + sp0[0:-1] for i in range(self.width)]).transpose(
+        sp = np.array([(sp0[1:] - sp0[0:-1]) * i / self.width + sp0[0:-1] for i in range(self.width)]).transpose(
             2, 1, 0
         )
         return sp

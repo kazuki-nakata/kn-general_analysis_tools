@@ -1,22 +1,33 @@
-satellite: "GCOM-W1 (SHIZUKU)"
+satellite: "GOSAT-GW (please order TLE file)"
 obs_direction: "middle"
 equator_crossing_local_time: 13.5
-altitude: 699600
-obs_width: 1617000
+altitude: 666000
+obs_width: 1530000
 obs_offset: 0
 beam_width:
   6G: 1.8
   7G: 1.8
+  10uG: 1.2
   10G: 1.2
   18G: 0.65
   23G: 0.75
   36G: 0.35
   89G: 0.15
+  165G_AZ: 0.23
+  165G_EL: 0.30
+  183r7G_AZ: 0.23
+  183r7G_EL: 0.27
+  183r3G_AZ: 0.23
+  183r3G_EL: 0.27
 integration_time:
   6G: 2.6
   7G: 2.6
   10G: 2.6
+  10uG: 2.6
   18G: 2.6
   23G: 2.6
   36G: 2.6
   89G: 1.3
+  165G: 2.6
+  183r7G: 2.6
+  183r3G: 2.6

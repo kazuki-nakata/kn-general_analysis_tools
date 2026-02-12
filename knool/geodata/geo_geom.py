@@ -10,7 +10,7 @@ def create_point(lat, lon):
 def create_points(latlon_list):  # or latlon_array
     point_list = []
     for latlon in latlon_list:
-        point = create_point(latlon[1], latlon[0])
+        point = create_point(latlon[0], latlon[1])
         point_list.append(point)
     return point_list
 
